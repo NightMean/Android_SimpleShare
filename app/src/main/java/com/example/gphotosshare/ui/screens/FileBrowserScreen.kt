@@ -62,6 +62,11 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.background
 import kotlinx.coroutines.launch
 import java.io.File
@@ -286,14 +291,84 @@ fun FileBrowserScreen(
                 }
 
                 // Fast Scroll Implementation
+                // Fast Scroll Implementation
+                val scrollStateValues by remember(isGridView, listState, gridState, files) {
+                    androidx.compose.runtime.derivedStateOf {
+                        val totalItems: Int
+                        val visibleItemsCount: Int
+                        val firstIndex: Int
+                        val firstOffset: Int
+                        val itemSize: Int
+                        
+                        if (isGridView) {
+                            val layout = gridState.layoutInfo
+                            totalItems = layout.totalItemsCount
+                            val visibleInfo = layout.visibleItemsInfo
+                            visibleItemsCount = visibleInfo.size
+                            firstIndex = gridState.firstVisibleItemIndex
+                            firstOffset = gridState.firstVisibleItemScrollOffset
+                            itemSize = (visibleInfo.firstOrNull() as? androidx.compose.foundation.lazy.grid.LazyGridItemInfo)?.size?.height ?: 0
+                        } else {
+                            val layout = listState.layoutInfo
+                            totalItems = layout.totalItemsCount
+                            val visibleInfo = layout.visibleItemsInfo
+                            visibleItemsCount = visibleInfo.size
+                            firstIndex = listState.firstVisibleItemIndex
+                            firstOffset = listState.firstVisibleItemScrollOffset
+                            itemSize = (visibleInfo.firstOrNull() as? androidx.compose.foundation.lazy.LazyListItemInfo)?.size ?: 0
+                        }
+                        
+                        if (totalItems == 0 || visibleItemsCount == 0 || itemSize <= 0) 0f to 0f
+                        else {
+                             // Sizing Stability: Use Viewport / TotalContent estimation
+                             // This stops the scrollbar from jumping when visibleItemsCount fluctuates by 1
+                             val viewportHeight: Int
+                             if (isGridView) {
+                                 viewportHeight = gridState.layoutInfo.viewportSize.height
+                             } else {
+                                 viewportHeight = listState.layoutInfo.viewportSize.height
+                             }
+                             
+                             val estimatedTotalContentHeight = itemSize.toFloat() * totalItems
+                             val fraction = (viewportHeight.toFloat() / estimatedTotalContentHeight).coerceIn(0f, 1f)
+
+                             val offsetFraction = firstOffset.toFloat() / itemSize.toFloat()
+                             val effectiveIndex = firstIndex + offsetFraction
+                             val maxIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
+                             val progress = (effectiveIndex / maxIndex.toFloat()).coerceIn(0f, 1f)
+                             
+                             progress to fraction
+                        }
+                    }
+                }
+
                 FastScroller(
                     files = files,
-                    onScrollTo = { index ->
-                        coroutineScope.launch {
+                    scrollProgress = scrollStateValues.first,
+                    visibleFraction = scrollStateValues.second,
+                    modifier = Modifier.padding(top = 16.dp, bottom = 16.dp), // Fix boundaries
+                    onScrollTo = { progress ->
+                         coroutineScope.launch {
+                            val totalItems: Int
+                            val visibleItemsCount: Int
+                            
                             if (isGridView) {
-                                gridState.scrollToItem(index)
+                                val layout = gridState.layoutInfo
+                                totalItems = layout.totalItemsCount
+                                visibleItemsCount = layout.visibleItemsInfo.size
                             } else {
-                                listState.scrollToItem(index)
+                                val layout = listState.layoutInfo
+                                totalItems = layout.totalItemsCount
+                                visibleItemsCount = layout.visibleItemsInfo.size
+                            }
+
+                            val maxIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
+                            val targetIndex = (progress * maxIndex.toFloat()).toInt()
+                            
+                            if (isGridView) {
+                                gridState.scrollToItem(targetIndex)
+                            } else {
+                                listState.scrollToItem(targetIndex)
                             }
                         }
                     }
@@ -329,74 +404,102 @@ fun FileBrowserScreen(
 @Composable
 fun FastScroller(
     files: List<FileModel>,
-    onScrollTo: (Int) -> Unit
+    scrollProgress: Float,
+    visibleFraction: Float,
+    modifier: Modifier = Modifier,
+    onScrollTo: (Float) -> Unit
 ) {
-    if (files.size < 20) return // Only show scrollbar if list is scrollable (approx check)
+    if (files.size < 10) return 
 
     var isDragging by remember { mutableStateOf(false) }
     var currentLetter by remember { mutableStateOf<Char?>(null) }
     var currentY by remember { mutableStateOf(0f) }
     val listSize = files.size
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        // Scroll Bar Track & Touch Area
+    androidx.compose.foundation.layout.BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+        val trackHeight = constraints.maxHeight.toFloat()
+        val minThumbHeight = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
+        val thumbHeight = (trackHeight * visibleFraction).coerceAtLeast(minThumbHeight)
+        
+        val travelDistance = trackHeight - thumbHeight
+
+        // Scroll Bar Touch Area
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
                 .padding(end = 2.dp)
-                .width(24.dp) // Generous touch target
+                .width(32.dp) 
                 .fillMaxHeight()
-                .pointerInput(listSize) {
+                .pointerInput(listSize, trackHeight, thumbHeight) {
                     detectVerticalDragGestures(
                         onDragStart = { offset ->
                             isDragging = true
-                            currentY = offset.y
-                            // Initial tap also triggers scroll ?? Standard behavior is drag.
-                            // But for fast access, tapping jump is nice. 
-                            // detectVerticalDragGestures doesn't handle tap. 
-                            // We can use detectTapGestures separately but drag is sufficient for "FastScroll".
+                            currentY = offset.y.coerceIn(0f, trackHeight)
                         },
                         onDragEnd = { isDragging = false },
                         onDragCancel = { isDragging = false },
                         onVerticalDrag = { change, _ ->
-                            currentY = change.position.y
-                            // Proportional Logic
-                            val progress = (currentY / size.height.toFloat()).coerceIn(0f, 1f)
-                            val index = (progress * (listSize - 1)).toInt()
+                            currentY = change.position.y.coerceIn(0f, trackHeight)
+                            // Map Y to Progress (0..1)
+                            // Center of thumb should follow finger? Or top of thumb?
+                            // Standard behavior: if thumb is large, we drag the point we touched.
+                            // Simplified: Map Y (constrained) to range.
                             
+                            // Let's assume we drag the CENTER of the thumb for better feel, or just map top.
+                            // If we map top: `currentY` is the top position.
+                            // `progress = currentY / travelDistance`.
+                            // But `currentY` is from `change.position.y` which is raw touch.
+                            // To be precise: `progress = (touchY - thumbHeight/2) / travelDistance`.
+                            // But `currentY` is updated by drag.
+                            
+                            val rawProgress = (currentY - thumbHeight / 2) / travelDistance
+                            val progress = rawProgress.coerceIn(0f, 1f)
+                            onScrollTo(progress)
+                            
+                            // Update hint letter based on progress
+                            val index = (progress * (listSize - 1)).toInt()
                             val file = files.getOrNull(index)
                             if (file != null) {
                                 currentLetter = file.name.firstOrNull()?.uppercaseChar() ?: '#'
-                                onScrollTo(index)
                             }
                         }
                     )
                 }
         ) {
-              // Visual Indicator (Thin Bar)
+              // Dynamic Thumb
+              val visualY = if (isDragging) {
+                  currentY - thumbHeight / 2
+              } else {
+                  scrollProgress * travelDistance
+              }
+              val effectiveY = visualY.coerceIn(0f, travelDistance)
+
               Box(
                   modifier = Modifier
-                      .align(Alignment.Center)
+                      .offset { androidx.compose.ui.unit.IntOffset(0, effectiveY.toInt()) }
+                      .align(Alignment.TopCenter)
                       .width(4.dp)
-                      .fillMaxHeight(0.95f) // Slightly padded vertically
-                      .background(MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                      .height(with(androidx.compose.ui.platform.LocalDensity.current) { thumbHeight.toDp() })
+                      .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
               )
         }
 
         // Hint Bubble
         if (isDragging && currentLetter != null) {
+            val bubbleY = (currentY - 150f).coerceIn(0f, trackHeight - 200f) 
+            
             Box(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(top = 100.dp, end = 50.dp) 
-                    .offset(y = with(androidx.compose.ui.platform.LocalDensity.current) { currentY.toDp() - 80.dp })
-                    .size(60.dp)
+                    .offset { androidx.compose.ui.unit.IntOffset(0, bubbleY.toInt()) }
+                    .padding(end = 48.dp) 
+                    .size(64.dp)
                     .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
                     text = currentLetter.toString(),
-                    style = MaterialTheme.typography.headlineLarge,
+                    style = MaterialTheme.typography.displaySmall,
                     color = MaterialTheme.colorScheme.onPrimary
                 )
             }
