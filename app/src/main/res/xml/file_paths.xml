@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-path name="external_files" path="."/>
+    <!-- Needed for /storage/emulated/0 which maps to external-path usually -->
+    <!-- Also add root-path for broader access if needed, but external-path is standard for emulated/0 -->
+    <root-path name="root" path="." />
+</paths>
