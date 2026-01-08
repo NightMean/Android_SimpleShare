@@ -9,33 +9,50 @@ class AppRepository(private val context: Context) {
 
     fun getShareableApps(): List<AppModel> {
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "image/*" // Query for image handlers, most video handlers overlap
+            type = "image/*"
+            addCategory(Intent.CATEGORY_DEFAULT) // Ensure we catch default handlers
         }
 
         val packageManager = context.packageManager
-        val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            packageManager.queryIntentActivities(
-                intent,
-                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
-            )
+        // MATCH_ALL ensures we see everything, including disabled components that might be toggleable, 
+        // but mainly it helps avoid filtering. However, MATCH_DEFAULT_ONLY is standard for resolution.
+        // User reports missing apps. Let's try MATCH_ALL flag which is 131072.
+        // For Tiramisu+, we use ResolveInfoFlags.
+        
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+             PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
         } else {
-            packageManager.queryIntentActivities(intent, PackageManager.MATCH_DEFAULT_ONLY)
+             PackageManager.MATCH_ALL
+        }
+
+        val resolveInfos = try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                packageManager.queryIntentActivities(intent, flags as PackageManager.ResolveInfoFlags)
+            } else {
+                packageManager.queryIntentActivities(intent, flags as Int)
+            }
+        } catch (e: Exception) {
+            emptyList()
         }
 
         return resolveInfos.mapNotNull { resolveInfo ->
-            val activityInfo = resolveInfo.activityInfo
+            val activityInfo = resolveInfo.activityInfo ?: return@mapNotNull null
             val packageName = activityInfo.packageName
             
-            // Filter out own app if it shows up
             if (packageName == context.packageName) return@mapNotNull null
 
             try {
-                val appName = resolveInfo.loadLabel(packageManager).toString()
-                val icon = resolveInfo.loadIcon(packageManager)
-                AppModel(appName, packageName, icon)
+                // Load label safely
+                val appName = resolveInfo.loadLabel(packageManager)?.toString() ?: packageName
+                // Load icon safely
+                val icon = resolveInfo.loadIcon(packageManager) ?: packageManager.getDefaultActivityIcon()
+                val activityName = activityInfo.name
+                
+                AppModel(appName, packageName, activityName, icon)
             } catch (e: Exception) {
+                // If loading resources fails, skip or try fallback
                 null
             }
-        }.distinctBy { it.packageName }.sortedBy { it.name }
+        }.distinctBy { "${it.packageName}/${it.activityName}" }.sortedBy { it.name }
     }
 }

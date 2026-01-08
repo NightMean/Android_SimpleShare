@@ -23,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -44,6 +45,8 @@ class MainActivity : ComponentActivity() {
     private val PREFS_NAME = "gphotos_share_prefs"
     private val KEY_DEFAULT_PATH = "default_path"
     private val KEY_TARGET_APP = "target_app_package"
+    private val KEY_KEEP_SELECTION = "keep_selection"
+    private val KEY_SHOW_THUMBNAILS = "show_thumbnails"
     private lateinit var prefs: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,10 +73,26 @@ class MainActivity : ComponentActivity() {
         // Define default path from prefs, but also keep track of current browsing path
         val savedDefaultPath = prefs.getString(KEY_DEFAULT_PATH, FileRepository().getDefaultPath()) ?: FileRepository().getDefaultPath()
         val savedTargetApp = prefs.getString(KEY_TARGET_APP, null)
+        val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
+        val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
         
         // We initialize currentPath with savedDefaultPath, but it's now state managed here
         var currentPath by remember { mutableStateOf(savedDefaultPath) }
         var targetAppPackage by remember { mutableStateOf(savedTargetApp) }
+        var keepSelection by remember { mutableStateOf(savedKeepSelection) }
+        var showThumbnails by remember { mutableStateOf(savedShowThumbnails) }
+        
+        // Hoisted selection state
+        val selectedFiles = remember { androidx.compose.runtime.mutableStateListOf<com.example.gphotosshare.data.FileModel>() }
+        
+        // Handle Coil Cache clearing when disabled
+        val context = androidx.compose.ui.platform.LocalContext.current
+        LaunchedEffect(showThumbnails) {
+            if (!showThumbnails) {
+                // Clear memory cache to free up resources as requested
+                coil.Coil.imageLoader(context).memoryCache?.clear()
+            }
+        }
 
         // This is a simple state trigger to refresh UI after returning from Settings
         val lifecycleOwner = androidx.compose.ui.platform.LocalLifecycleOwner.current
@@ -97,7 +116,10 @@ class MainActivity : ComponentActivity() {
                 initialPath = savedDefaultPath,
                 currentPath = currentPath,
                 onPathChange = { newPath -> currentPath = newPath },
+                selectedFiles = selectedFiles,
                 targetAppPackageName = targetAppPackage,
+                keepSelection = keepSelection,
+                showThumbnails = showThumbnails,
                 onSettingsClick = { showSettings = true }
             )
             
@@ -105,8 +127,13 @@ class MainActivity : ComponentActivity() {
                 SettingsDialog(
                     currentDefaultPath = savedDefaultPath,
                     currentBrowserPath = currentPath,
+                    currentTargetAppPackage = targetAppPackage,
+                    currentKeepSelection = keepSelection,
+                    currentShowThumbnails = showThumbnails,
+                    selectedFileCount = selectedFiles.size,
                     onDismiss = { showSettings = false },
-                    onSave = { newPath, newAppPackage ->
+                    onClearSelection = { selectedFiles.clear() },
+                    onSave = { newPath, newAppPackage, newKeepSelection, newShowThumbnails ->
                         val editor = prefs.edit()
                         editor.putString(KEY_DEFAULT_PATH, newPath)
                         if (newAppPackage != null) {
@@ -116,6 +143,12 @@ class MainActivity : ComponentActivity() {
                             editor.remove(KEY_TARGET_APP)
                             targetAppPackage = null
                         }
+                        editor.putBoolean(KEY_KEEP_SELECTION, newKeepSelection)
+                        keepSelection = newKeepSelection
+                        
+                        editor.putBoolean(KEY_SHOW_THUMBNAILS, newShowThumbnails)
+                        showThumbnails = newShowThumbnails
+                        
                         editor.apply()
                         
                         showSettings = false

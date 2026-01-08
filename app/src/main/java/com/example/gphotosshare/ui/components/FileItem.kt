@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.VideoFile
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -44,6 +45,7 @@ import com.example.gphotosshare.data.FileModel
 @Composable
 fun FileListItem(
     file: FileModel,
+    showThumbnail: Boolean,
     onClick: () -> Unit
 ) {
     Row(
@@ -54,7 +56,7 @@ fun FileListItem(
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        FileThumbnail(file = file, modifier = Modifier.size(48.dp))
+        FileThumbnail(file = file, showThumbnail = showThumbnail, modifier = Modifier.size(48.dp))
         
         Spacer(modifier = Modifier.width(16.dp))
 
@@ -79,6 +81,7 @@ fun FileListItem(
 @Composable
 fun FileGridItem(
     file: FileModel,
+    showThumbnail: Boolean,
     onClick: () -> Unit
 ) {
     Card(
@@ -107,7 +110,7 @@ fun FileGridItem(
                         .weight(1f)
                         .fillMaxWidth()
                 ) {
-                   FileThumbnail(file = file, modifier = Modifier.fillMaxSize())
+                   FileThumbnail(file = file, showThumbnail = showThumbnail, modifier = Modifier.fillMaxSize())
                 }
                 
                 Text(
@@ -137,6 +140,7 @@ fun FileGridItem(
 @Composable
 fun FileThumbnail(
     file: FileModel,
+    showThumbnail: Boolean,
     modifier: Modifier = Modifier
 ) {
     if (file.isDirectory) {
@@ -151,25 +155,49 @@ fun FileThumbnail(
     } else {
         val context = LocalContext.current
         val isVideo = file.extension in setOf("mp4", "mkv", "webm", "avi")
+        val isImage = file.extension in setOf("jpg", "jpeg", "png", "gif", "heic", "webp")
         
-        val fallbackPainter = androidx.compose.ui.graphics.vector.rememberVectorPainter(
-            image = if (isVideo) Icons.Default.VideoFile else Icons.Default.InsertDriveFile
-        )
+        val iconVector = if (isVideo) {
+            Icons.Default.VideoFile 
+        } else if (isImage) {
+            Icons.Default.Image
+        } else {
+            Icons.Default.InsertDriveFile
+        }
 
-        AsyncImage(
-            model = ImageRequest.Builder(context)
-                .data(file.file)
-                .decoderFactory { result, options, _ ->
-                     if (isVideo) VideoFrameDecoder(result.source, options) else null
-                }
-                .crossfade(true)
-                .build(),
-            contentDescription = "Thumbnail",
-            contentScale = ContentScale.Crop,
-            modifier = modifier.clip(RoundedCornerShape(8.dp)),
-            error = fallbackPainter,
-            placeholder = fallbackPainter,
-            fallback = fallbackPainter
-        )
+        // We use a Box to layer the AsyncImage OVER the default Icon.
+        // This ensures that before the image loads (or if it fails), the user sees the EXACT SAME
+        // icon as they would if thumbnails were disabled (fixing the "Black Icon" issue).
+        Box(
+            modifier = modifier
+                .clip(RoundedCornerShape(8.dp))
+                .background(if (showThumbnail) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent), // slight background for thumbnail area
+            contentAlignment = Alignment.Center
+        ) {
+            // 1. The Base Icon (Always visible underneath, acts as placeholder/fallback)
+            Icon(
+                imageVector = iconVector,
+                contentDescription = null, // Decorative, context is in file name or AsyncImage content desc
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.fillMaxSize(0.5f)
+            )
+
+            // 2. The Image (Only if enabled)
+            if (showThumbnail) {
+                AsyncImage(
+                    model = ImageRequest.Builder(context)
+                        .data(file.file)
+                        .size(300) // Restrict size to reduce memory usage and decode time (critical for HEIC/Video)
+                        .decoderFactory { result, options, _ ->
+                             if (isVideo) VideoFrameDecoder(result.source, options) else null
+                        }
+                        .crossfade(true)
+                        .build(),
+                    contentDescription = "Thumbnail",
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.matchParentSize()
+                )
+            }
+        }
     }
 }

@@ -43,16 +43,21 @@ import com.google.accompanist.drawablepainter.rememberDrawablePainter
 fun SettingsDialog(
     currentDefaultPath: String,
     currentBrowserPath: String,
+    currentTargetAppPackage: String?,
+    currentKeepSelection: Boolean,
+    currentShowThumbnails: Boolean,
+    selectedFileCount: Int,
     onDismiss: () -> Unit,
-    onSave: (String, String?) -> Unit // path, packageName
+    onClearSelection: () -> Unit,
+    onSave: (String, String?, Boolean, Boolean) -> Unit // path, componentName (pkg/cls), keepSelection, showThumbnails
 ) {
     var path by remember { mutableStateOf(currentDefaultPath) }
-    var selectedAppPackage by remember { mutableStateOf<String?>(null) } // Load initial from elsewhere? passed in?
-    // We should pass in the currently selected app package too.
-    
-    // Changing signature to include selectedAppPackage
-    // But since I can't easily change the signature and all callsites in one replace_chunk cleanly if I don't see them all,
-    // I will assume the caller will be updated.
+    // Initialize with passed value. componentName is "pkg/cls" or just "pkg" (backward compat)
+    val defaultPhotosPackage = "com.google.android.apps.photos" 
+    // We try to match by package if component is missing, or exact string match
+    var selectedComponent by remember { mutableStateOf(currentTargetAppPackage ?: defaultPhotosPackage) }
+    var keepSelection by remember { mutableStateOf(currentKeepSelection) }
+    var showThumbnails by remember { mutableStateOf(currentShowThumbnails) }
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val appRepository = remember { AppRepository(context) }
@@ -62,16 +67,40 @@ fun SettingsDialog(
         apps = appRepository.getShareableApps()
     }
     
-    // We need to fetch the saved package preference to show as selected. 
-    // Ideally this is passed in. I'll modify the signature to accept it.
-    // For now, I'll use a local fetch for simplicity if not passed, but passing is better.
-    // Let's rely on the caller passing it.
+    // State for warning dialog
+    var showClearSelectionWarning by remember { mutableStateOf(false) }
+
+    if (showClearSelectionWarning) {
+        AlertDialog(
+            onDismissRequest = { showClearSelectionWarning = false },
+            title = { Text("Clear Selection?") },
+            text = { Text("Some files are already selected. Do you want to continue? This will clear your current selection.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        onClearSelection()
+                        keepSelection = false
+                        showClearSelectionWarning = false
+                    }
+                ) {
+                    Text("Yes")
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showClearSelectionWarning = false }
+                ) {
+                    Text("No")
+                }
+            }
+        )
+    }
     
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
         text = {
-            Column {
+            Column(modifier = Modifier.fillMaxWidth()) {
                 Text("Default Path")
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -89,26 +118,67 @@ fun SettingsDialog(
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
+                
+                // Toggle: Keep Selection
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { 
+                        val newValue = !keepSelection
+                        if (!newValue && selectedFileCount > 0) {
+                            showClearSelectionWarning = true
+                        } else {
+                            keepSelection = newValue
+                        }
+                    }
+                ) {
+                    Text("Keep selection across folders", modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(
+                        checked = keepSelection,
+                        onCheckedChange = { newValue ->
+                            if (!newValue && selectedFileCount > 0) {
+                                showClearSelectionWarning = true
+                            } else {
+                                keepSelection = newValue
+                            }
+                        }
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+                
+                // Toggle: Thumbnails
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { showThumbnails = !showThumbnails }
+                ) {
+                    Text("Generate thumbnails", modifier = Modifier.weight(1f))
+                    androidx.compose.material3.Switch(
+                        checked = showThumbnails,
+                        onCheckedChange = { showThumbnails = it }
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
                 Text("Default Share App")
                 Spacer(modifier = Modifier.height(8.dp))
                 
-                // Simple dropdown or list for apps
-                // Using a simple LazyColumn with limited height for now
-                // Simple dropdown or list for apps
-                // Using a simple LazyColumn with limited height for now
                 LazyColumn(
                     modifier = Modifier
-                        .height(200.dp)
+                        .height(300.dp)
                         .fillMaxWidth()
                         .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
                 ) {
                    items(apps.size) { index ->
                        val app = apps[index]
-                       val isSelected = app.packageName == selectedAppPackage
+                       // Logic to determine unique ID. If app has same package but different activity, we need robust check.
+                       // User wants "pkg/cls" to be saved.
+                       val componentString = "${app.packageName}/${app.activityName}"
+                       val isSelected = componentString == selectedComponent || selectedComponent == app.packageName // Fallback match
+                       
                        Row(
                            modifier = Modifier
                                .fillMaxWidth()
-                               .clickable { selectedAppPackage = app.packageName }
+                               .clickable { selectedComponent = componentString }
                                .background(if (isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
                                .padding(8.dp),
                            verticalAlignment = Alignment.CenterVertically
@@ -116,18 +186,28 @@ fun SettingsDialog(
                            Image(
                                painter = rememberDrawablePainter(drawable = app.icon),
                                contentDescription = null,
-                               modifier = Modifier.size(32.dp)
+                               modifier = Modifier.size(40.dp)
                            )
-                           Spacer(modifier = Modifier.width(8.dp))
-                           Text(
-                               text = app.name,
-                               style = MaterialTheme.typography.bodyMedium,
-                               maxLines = 1,
-                               overflow = TextOverflow.Ellipsis
-                           )
+                           Spacer(modifier = Modifier.width(12.dp))
+                           Column {
+                               Text(
+                                   text = app.name,
+                                   style = MaterialTheme.typography.bodyMedium,
+                                   maxLines = 1,
+                                   overflow = TextOverflow.Ellipsis
+                               )
+                               Text(
+                                   text = app.packageName, 
+                                   style = MaterialTheme.typography.labelSmall,
+                                   color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                   maxLines = 1,
+                                   overflow = TextOverflow.Ellipsis
+                               )
+                           }
+                           
                            if (isSelected) {
                                Spacer(modifier = Modifier.weight(1f))
-                               Icon(Icons.Default.Check, contentDescription = "Selected", modifier = Modifier.size(16.dp))
+                               Icon(Icons.Default.Check, contentDescription = "Selected", modifier = Modifier.size(24.dp))
                            }
                        }
                        Divider()
@@ -136,7 +216,9 @@ fun SettingsDialog(
             }
         },
         confirmButton = {
-            Button(onClick = { onSave(path, selectedAppPackage) }) {
+            Button(onClick = { 
+                onSave(path, selectedComponent, keepSelection, showThumbnails) 
+            }) {
                 Text("Save")
             }
         },
