@@ -62,6 +62,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
@@ -292,7 +293,7 @@ fun FileBrowserScreen(
 
                 // Fast Scroll Implementation
                 // Fast Scroll Implementation
-                val scrollStateValues by remember(isGridView, listState, gridState, files) {
+                val scrollStateValues = remember(isGridView, listState, gridState, files) {
                     androidx.compose.runtime.derivedStateOf {
                         val totalItems: Int
                         val visibleItemsCount: Int
@@ -344,8 +345,7 @@ fun FileBrowserScreen(
 
                 FastScroller(
                     files = files,
-                    scrollProgress = scrollStateValues.first,
-                    visibleFraction = scrollStateValues.second,
+                    scrollState = scrollStateValues,
                     modifier = Modifier.padding(top = 16.dp, bottom = 16.dp), // Fix boundaries
                     onScrollTo = { progress ->
                          coroutineScope.launch {
@@ -404,8 +404,7 @@ fun FileBrowserScreen(
 @Composable
 fun FastScroller(
     files: List<FileModel>,
-    scrollProgress: Float,
-    visibleFraction: Float,
+    scrollState: androidx.compose.runtime.State<Pair<Float, Float>>,
     modifier: Modifier = Modifier,
     onScrollTo: (Float) -> Unit
 ) {
@@ -419,9 +418,11 @@ fun FastScroller(
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val trackHeight = constraints.maxHeight.toFloat()
         val minThumbHeight = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
-        val thumbHeight = (trackHeight * visibleFraction).coerceAtLeast(minThumbHeight)
         
-        val travelDistance = trackHeight - thumbHeight
+        // Use a persistent object for drag logic to avoid recomposing the pointerInput block
+        // However, pointerInput captures 'listSize', 'trackHeight'. trackHeight is from BoxWithConstraints which might change on resize.
+        // We need to access scrollState inside drag logic (for 'thumbHeight' calculation if we want precision).
+        // But for now, simplified drag logic is okay.
 
         // Scroll Bar Touch Area
         Box(
@@ -430,7 +431,7 @@ fun FastScroller(
                 .padding(end = 2.dp)
                 .width(32.dp) 
                 .fillMaxHeight()
-                .pointerInput(listSize, trackHeight, thumbHeight) {
+                .pointerInput(listSize, trackHeight, scrollState) {
                     detectVerticalDragGestures(
                         onDragStart = { offset ->
                             isDragging = true
@@ -440,23 +441,16 @@ fun FastScroller(
                         onDragCancel = { isDragging = false },
                         onVerticalDrag = { change, _ ->
                             currentY = change.position.y.coerceIn(0f, trackHeight)
-                            // Map Y to Progress (0..1)
-                            // Center of thumb should follow finger? Or top of thumb?
-                            // Standard behavior: if thumb is large, we drag the point we touched.
-                            // Simplified: Map Y (constrained) to range.
                             
-                            // Let's assume we drag the CENTER of the thumb for better feel, or just map top.
-                            // If we map top: `currentY` is the top position.
-                            // `progress = currentY / travelDistance`.
-                            // But `currentY` is from `change.position.y` which is raw touch.
-                            // To be precise: `progress = (touchY - thumbHeight/2) / travelDistance`.
-                            // But `currentY` is updated by drag.
+                            // We need thumbHeight here to be precise.
+                            val (_, fraction) = scrollState.value
+                            val thumbHeight = (trackHeight * fraction).coerceAtLeast(minThumbHeight)
+                            val travelDistance = trackHeight - thumbHeight
                             
                             val rawProgress = (currentY - thumbHeight / 2) / travelDistance
                             val progress = rawProgress.coerceIn(0f, 1f)
                             onScrollTo(progress)
                             
-                            // Update hint letter based on progress
                             val index = (progress * (listSize - 1)).toInt()
                             val file = files.getOrNull(index)
                             if (file != null) {
@@ -466,23 +460,39 @@ fun FastScroller(
                     )
                 }
         ) {
-              // Dynamic Thumb
-              val visualY = if (isDragging) {
-                  currentY - thumbHeight / 2
-              } else {
-                  scrollProgress * travelDistance
-              }
-              val effectiveY = visualY.coerceIn(0f, travelDistance)
-
+              // Dynamic Thumb using Layout Phase to avoid Recomposition
               Box(
                   modifier = Modifier
-                      .offset { androidx.compose.ui.unit.IntOffset(0, effectiveY.toInt()) }
                       .align(Alignment.TopCenter)
                       .width(4.dp)
-                      .height(with(androidx.compose.ui.platform.LocalDensity.current) { thumbHeight.toDp() })
+                      .layout { measurable, constraints ->
+                          val (progress, fraction) = scrollState.value
+                          val thumbHeightValue = (trackHeight * fraction).coerceAtLeast(minThumbHeight)
+                          
+                          // Measure the thumb with the calculated height
+                          val placeable = measurable.measure(
+                              constraints.copy(
+                                  minHeight = thumbHeightValue.toInt(),
+                                  maxHeight = thumbHeightValue.toInt()
+                              )
+                          )
+                          
+                          val travelDistance = trackHeight - thumbHeightValue
+                          val visualY = if (isDragging) {
+                              currentY - thumbHeightValue / 2
+                          } else {
+                              progress * travelDistance
+                          }
+                          val effectiveY = visualY.coerceIn(0f, travelDistance)
+                          
+                          layout(placeable.width, placeable.height) {
+                              placeable.place(0, effectiveY.toInt())
+                          }
+                      }
                       .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
               )
         }
+
 
         // Hint Bubble
         if (isDragging && currentLetter != null) {
