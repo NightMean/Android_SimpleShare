@@ -12,6 +12,13 @@
     <!-- Write is often needed for older androids if we were editing, but user said "read-only", basically sharing. 
          However, for broad access on <11, READ_EXTERNAL_STORAGE is key. -->
     
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="*/*" />
+        </intent>
+    </queries>
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"

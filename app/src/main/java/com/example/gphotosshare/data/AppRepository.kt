@@ -9,8 +9,8 @@ class AppRepository(private val context: Context) {
 
     fun getShareableApps(): List<AppModel> {
         val intent = Intent(Intent.ACTION_SEND).apply {
-            type = "image/*"
-            addCategory(Intent.CATEGORY_DEFAULT) // Ensure we catch default handlers
+            type = "*/*" // Use */* to ensure we find ALL apps (like Google Drive, primitive file handlers, etc)
+            addCategory(Intent.CATEGORY_DEFAULT)
         }
 
         val packageManager = context.packageManager
