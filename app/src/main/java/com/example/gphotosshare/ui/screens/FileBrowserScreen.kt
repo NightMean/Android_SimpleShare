@@ -62,6 +62,7 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.height
@@ -363,12 +364,29 @@ fun FileBrowserScreen(
                             }
 
                             val maxIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
-                            val targetIndex = (progress * maxIndex.toFloat()).toInt()
                             
-                            if (isGridView) {
-                                gridState.scrollToItem(targetIndex)
+                            // Smooth Scrolling Calculation
+                            // Estimate total content height based on the first item's size
+                            val itemSize = if (isGridView) {
+                                (gridState.layoutInfo.visibleItemsInfo.firstOrNull() as? androidx.compose.foundation.lazy.grid.LazyGridItemInfo)?.size?.height ?: 0
                             } else {
-                                listState.scrollToItem(targetIndex)
+                                (listState.layoutInfo.visibleItemsInfo.firstOrNull() as? androidx.compose.foundation.lazy.LazyListItemInfo)?.size ?: 0
+                            }
+                            
+                            
+                            if (itemSize > 0) {
+                                // Calculate exact target pixel in the entire list
+                                val totalPixels = totalItems * itemSize.toFloat()
+                                val targetPixels = progress * totalPixels
+                                
+                                val targetIndex = (targetPixels / itemSize).toInt().coerceIn(0, totalItems - 1)
+                                val offset = (targetPixels % itemSize).toInt()
+                                
+                                if (isGridView) {
+                                    gridState.scrollToItem(targetIndex, -offset)
+                                } else {
+                                    listState.scrollToItem(targetIndex, -offset)
+                                }
                             }
                         }
                     }
@@ -410,9 +428,10 @@ fun FastScroller(
 ) {
     if (files.size < 10) return 
 
-    var isDragging by remember { mutableStateOf(false) }
-    var currentLetter by remember { mutableStateOf<Char?>(null) }
-    var currentY by remember { mutableStateOf(0f) }
+    // Use State objects directly to avoid recomposition when values change
+    val isDraggingState = remember { mutableStateOf(false) }
+    val currentLetterState = remember { mutableStateOf<Char?>(null) }
+    val currentYState = remember { mutableStateOf(0f) }
     val listSize = files.size
 
     androidx.compose.foundation.layout.BoxWithConstraints(modifier = modifier.fillMaxSize()) {
@@ -434,27 +453,28 @@ fun FastScroller(
                 .pointerInput(listSize, trackHeight, scrollState) {
                     detectVerticalDragGestures(
                         onDragStart = { offset ->
-                            isDragging = true
-                            currentY = offset.y.coerceIn(0f, trackHeight)
+                            isDraggingState.value = true
+                            currentYState.value = offset.y.coerceIn(0f, trackHeight)
                         },
-                        onDragEnd = { isDragging = false },
-                        onDragCancel = { isDragging = false },
+                        onDragEnd = { isDraggingState.value = false },
+                        onDragCancel = { isDraggingState.value = false },
                         onVerticalDrag = { change, _ ->
-                            currentY = change.position.y.coerceIn(0f, trackHeight)
+                            val y = change.position.y.coerceIn(0f, trackHeight)
+                            currentYState.value = y
                             
                             // We need thumbHeight here to be precise.
                             val (_, fraction) = scrollState.value
                             val thumbHeight = (trackHeight * fraction).coerceAtLeast(minThumbHeight)
                             val travelDistance = trackHeight - thumbHeight
                             
-                            val rawProgress = (currentY - thumbHeight / 2) / travelDistance
+                            val rawProgress = (y - thumbHeight / 2) / travelDistance
                             val progress = rawProgress.coerceIn(0f, 1f)
                             onScrollTo(progress)
                             
                             val index = (progress * (listSize - 1)).toInt()
                             val file = files.getOrNull(index)
                             if (file != null) {
-                                currentLetter = file.name.firstOrNull()?.uppercaseChar() ?: '#'
+                                currentLetterState.value = file.name.firstOrNull()?.uppercaseChar() ?: '#'
                             }
                         }
                     )
@@ -478,6 +498,10 @@ fun FastScroller(
                           )
                           
                           val travelDistance = trackHeight - thumbHeightValue
+                          // Use .value to read state in Layout phase without causing Recomposition of the parent
+                          val isDragging = isDraggingState.value
+                          val currentY = currentYState.value
+                          
                           val visualY = if (isDragging) {
                               currentY - thumbHeightValue / 2
                           } else {
@@ -494,25 +518,48 @@ fun FastScroller(
         }
 
 
-        // Hint Bubble
-        if (isDragging && currentLetter != null) {
-            val bubbleY = (currentY - 150f).coerceIn(0f, trackHeight - 200f) 
-            
-            Box(
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .offset { androidx.compose.ui.unit.IntOffset(0, bubbleY.toInt()) }
-                    .padding(end = 48.dp) 
-                    .size(64.dp)
-                    .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(
-                    text = currentLetter.toString(),
-                    style = MaterialTheme.typography.displaySmall,
-                    color = MaterialTheme.colorScheme.onPrimary
-                )
-            }
+        // Separated Bubble Component to isolate Recomposition
+        FastScrollBubble(
+            isDraggingState = isDraggingState,
+            currentLetterState = currentLetterState,
+            currentYState = currentYState,
+            trackHeight = trackHeight
+        )
+    }
+}
+
+@Composable
+fun FastScrollBubble(
+    isDraggingState: androidx.compose.runtime.State<Boolean>,
+    currentLetterState: androidx.compose.runtime.State<Char?>,
+    currentYState: androidx.compose.runtime.State<Float>,
+    trackHeight: Float
+) {
+    val isDragging = isDraggingState.value
+    val currentLetter = currentLetterState.value
+    val currentY = currentYState.value
+
+        // Center the bubble on the touch position
+    if (isDragging && currentLetter != null) {
+        val bubbleSize = 64.dp
+        val bubbleSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { bubbleSize.toPx() }
+        val bubbleY = (currentY - bubbleSizePx / 2f).coerceIn(0f, trackHeight - bubbleSizePx) 
+        
+        Box(
+            modifier = Modifier
+                .fillMaxSize() // Fill parent to allow alignment
+                .wrapContentSize(Alignment.TopEnd) // Then align the box content
+                .offset { androidx.compose.ui.unit.IntOffset(0, bubbleY.toInt()) }
+                .padding(end = 48.dp) 
+                .size(bubbleSize)
+                .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = currentLetter.toString(),
+                style = MaterialTheme.typography.displaySmall,
+                color = MaterialTheme.colorScheme.onPrimary
+            )
         }
     }
 }

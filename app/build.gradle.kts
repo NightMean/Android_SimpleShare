@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
+    id("com.google.devtools.ksp")
 }
 
 android {
@@ -61,10 +62,10 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     
-    // Coil for image loading
-    implementation("io.coil-kt:coil-compose:2.5.0")
-    // Coil video frame fetcher (optional, useful for video thumbnails if not builtin basic)
-    implementation("io.coil-kt:coil-video:2.5.0")
+    // Glide for image loading (Better HEIC support)
+    implementation("com.github.bumptech.glide:compose:1.0.0-beta01")
+    implementation("com.github.bumptech.glide:glide:4.16.0")
+    ksp("com.github.bumptech.glide:ksp:4.16.0")
     
     // Accompanist
     implementation("com.google.accompanist:accompanist-drawablepainter:0.32.0")

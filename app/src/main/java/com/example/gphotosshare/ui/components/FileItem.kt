@@ -37,10 +37,8 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import coil.compose.AsyncImage
-import coil.request.ImageRequest
-import coil.decode.VideoFrameDecoder
 import com.example.gphotosshare.data.FileModel
+
 
 @Composable
 fun FileListItem(
@@ -137,6 +135,7 @@ fun FileGridItem(
     }
 }
 
+@OptIn(com.bumptech.glide.integration.compose.ExperimentalGlideComposeApi::class)
 @Composable
 fun FileThumbnail(
     file: FileModel,
@@ -165,38 +164,31 @@ fun FileThumbnail(
             Icons.Default.InsertDriveFile
         }
 
-        // We use a Box to layer the AsyncImage OVER the default Icon.
-        // This ensures that before the image loads (or if it fails), the user sees the EXACT SAME
-        // icon as they would if thumbnails were disabled (fixing the "Black Icon" issue).
+        // We use a Box to layer the GlideImage OVER the default Icon.
         Box(
             modifier = modifier
                 .clip(RoundedCornerShape(8.dp))
-                .background(if (showThumbnail) MaterialTheme.colorScheme.surfaceVariant else Color.Transparent), // slight background for thumbnail area
+                .background(MaterialTheme.colorScheme.surfaceVariant), // Always show background for consistency
             contentAlignment = Alignment.Center
         ) {
             // 1. The Base Icon (Always visible underneath, acts as placeholder/fallback)
             Icon(
                 imageVector = iconVector,
-                contentDescription = null, // Decorative, context is in file name or AsyncImage content desc
+                contentDescription = null,
                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.fillMaxSize(0.5f)
             )
 
             // 2. The Image (Only if enabled)
             if (showThumbnail) {
-                AsyncImage(
-                    model = ImageRequest.Builder(context)
-                        .data(file.file)
-                        .size(300) // Restrict size to reduce memory usage and decode time (critical for HEIC/Video)
-                        .decoderFactory { result, options, _ ->
-                             if (isVideo) VideoFrameDecoder(result.source, options) else null
-                        }
-                        .crossfade(true)
-                        .build(),
+                com.bumptech.glide.integration.compose.GlideImage(
+                    model = file.file,
                     contentDescription = "Thumbnail",
                     contentScale = ContentScale.Crop,
                     modifier = Modifier.matchParentSize()
-                )
+                ) {
+                    it.override(256)
+                }
             }
         }
     }

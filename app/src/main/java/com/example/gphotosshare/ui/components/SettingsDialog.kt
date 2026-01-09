@@ -49,7 +49,7 @@ fun SettingsDialog(
     selectedFileCount: Int,
     onDismiss: () -> Unit,
     onClearSelection: () -> Unit,
-    onSave: (String, String?, Boolean, Boolean) -> Unit // path, componentName (pkg/cls), keepSelection, showThumbnails
+    onSave: (String, String?, Boolean, Boolean) -> Unit // path, componentName, keepSelection, showThumbnails
 ) {
     var path by remember { mutableStateOf(currentDefaultPath) }
     // Initialize with passed value. componentName is "pkg/cls" or just "pkg" (backward compat)
@@ -157,6 +157,10 @@ fun SettingsDialog(
                         onCheckedChange = { showThumbnails = it }
                     )
                 }
+                
+                Spacer(modifier = Modifier.height(8.dp))
+
+
 
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Default Share App")

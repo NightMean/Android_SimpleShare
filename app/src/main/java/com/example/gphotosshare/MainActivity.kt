@@ -47,6 +47,7 @@ class MainActivity : ComponentActivity() {
     private val KEY_TARGET_APP = "target_app_package"
     private val KEY_KEEP_SELECTION = "keep_selection"
     private val KEY_SHOW_THUMBNAILS = "show_thumbnails"
+
     private lateinit var prefs: SharedPreferences
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -75,12 +76,14 @@ class MainActivity : ComponentActivity() {
         val savedTargetApp = prefs.getString(KEY_TARGET_APP, null)
         val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
+
         
         // We initialize currentPath with savedDefaultPath, but it's now state managed here
         var currentPath by remember { mutableStateOf(savedDefaultPath) }
         var targetAppPackage by remember { mutableStateOf(savedTargetApp) }
         var keepSelection by remember { mutableStateOf(savedKeepSelection) }
         var showThumbnails by remember { mutableStateOf(savedShowThumbnails) }
+
         
         // Hoisted selection state
         val selectedFiles = remember { androidx.compose.runtime.mutableStateListOf<com.example.gphotosshare.data.FileModel>() }
@@ -90,7 +93,7 @@ class MainActivity : ComponentActivity() {
         LaunchedEffect(showThumbnails) {
             if (!showThumbnails) {
                 // Clear memory cache to free up resources as requested
-                coil.Coil.imageLoader(context).memoryCache?.clear()
+                com.bumptech.glide.Glide.get(context).clearMemory()
             }
         }
 
@@ -148,6 +151,8 @@ class MainActivity : ComponentActivity() {
                         
                         editor.putBoolean(KEY_SHOW_THUMBNAILS, newShowThumbnails)
                         showThumbnails = newShowThumbnails
+                        
+
                         
                         editor.apply()
                         
