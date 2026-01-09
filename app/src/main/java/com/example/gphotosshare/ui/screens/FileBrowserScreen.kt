@@ -8,78 +8,101 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.List
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
+import androidx.compose.material3.BottomAppBar
 import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
-import androidx.core.content.ContextCompat.startActivity
+import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import com.example.gphotosshare.data.FileModel
 import com.example.gphotosshare.data.FileRepository
 import com.example.gphotosshare.ui.components.FileGridItem
 import com.example.gphotosshare.ui.components.FileListItem
 import com.example.gphotosshare.utils.StorageUtils
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.wrapContentSize
-import androidx.compose.ui.layout.layout
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.background
-import kotlinx.coroutines.launch
-import java.io.File
+import com.google.accompanist.drawablepainter.rememberDrawablePainter
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
+import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+enum class SortOption {
+    NAME, SIZE, DATE, TYPE
+}
+
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun FileBrowserScreen(
     repository: FileRepository,
-
     currentPath: String,
     onPathChange: (String) -> Unit,
     selectedFiles: MutableList<FileModel>, 
@@ -89,23 +112,26 @@ fun FileBrowserScreen(
     checkLowStorage: Boolean,
     onSettingsClick: () -> Unit
 ) {
-    // var currentPath by remember { mutableStateOf(initialPath) } // Hoisted
-    var files by remember { mutableStateOf(emptyList<FileModel>()) }
-    // var selectedFiles = remember { mutableStateListOf<FileModel>() } // Hoisted
+    var rawFiles by remember { mutableStateOf(emptyList<FileModel>()) }
     var isGridView by remember { mutableStateOf(false) }
     var showLowSpaceDialog by remember { mutableStateOf(false) }
 
+    // Logic States
+    var sortOption by remember { mutableStateOf(SortOption.NAME) }
+    var isSortAscending by remember { mutableStateOf(true) }
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchActive by remember { mutableStateOf(false) }
+    var showSortMenu by remember { mutableStateOf(false) }
+
     val context = LocalContext.current
-    // val scope = rememberCoroutineScope() // Unused
     
-    // Load badge icon if targetAppPackageName is set
+    // Load badge icon
     var targetAppIcon by remember { mutableStateOf<android.graphics.drawable.Drawable?>(null) }
     
     LaunchedEffect(targetAppPackageName) {
         if (targetAppPackageName != null) {
             withContext(Dispatchers.IO) {
                 try {
-                    // It might be "pkg/cls" or just "pkg"
                     if (targetAppPackageName.contains("/")) {
                         val split = targetAppPackageName.split("/")
                         val componentName = android.content.ComponentName(split[0], split[1])
@@ -127,29 +153,63 @@ fun FileBrowserScreen(
         }
     }
 
-    // Load files when path changes
+    // Load files
     LaunchedEffect(currentPath) {
         withContext(Dispatchers.IO) {
-            files = repository.listFiles(currentPath)
+            rawFiles = repository.listFiles(currentPath)
+        }
+    }
+    
+    fun refreshFiles() {
+        rawFiles = repository.listFiles(currentPath)
+    }
+
+    // Filter and Sort Logic
+    val displayedFiles by remember(rawFiles, searchQuery, sortOption, isSortAscending) {
+        derivedStateOf {
+            var result = if (searchQuery.isBlank()) {
+                rawFiles
+            } else {
+                rawFiles.filter { it.name.contains(searchQuery, ignoreCase = true) }
+            }
+
+            result = when (sortOption) {
+                SortOption.NAME -> if (isSortAscending) result.sortedBy { it.name.lowercase(Locale.getDefault()) } else result.sortedByDescending { it.name.lowercase(Locale.getDefault()) }
+                SortOption.SIZE -> if (isSortAscending) result.sortedBy { it.size } else result.sortedByDescending { it.size }
+                SortOption.DATE -> if (isSortAscending) result.sortedBy { it.file.lastModified() } else result.sortedByDescending { it.file.lastModified() }
+                SortOption.TYPE -> if (isSortAscending) result.sortedBy { it.extension } else result.sortedByDescending { it.extension }
+            }
+            // Always keep directories on top? User didn't specify, but typically standard.
+            // Current repository logic puts folders on top. Let's preserve that preference if SortOption is NAME, but others might mix.
+            // If user sorts by Size, they likely want big files on top regardless of folder.
+            // Let's stick to pure sort for now as requested.
+            result
         }
     }
 
-    // Handle Back Press to go up directory
+    // Handle Back Press
     val isAtRoot = File(currentPath).absolutePath == File(repository.getDefaultPath()).absolutePath
-    BackHandler(enabled = !isAtRoot) {
-        val parent = File(currentPath).parent
-        if (parent != null) {
-            if (!keepSelection) selectedFiles.clear()
-            onPathChange(parent)
+    BackHandler(enabled = !isAtRoot || isSearchActive) {
+        if (isSearchActive) {
+            isSearchActive = false
+            searchQuery = ""
+        } else {
+            val parent = File(currentPath).parent
+            if (parent != null) {
+                if (!keepSelection) selectedFiles.clear()
+                onPathChange(parent)
+            }
         }
     }
 
     fun handleFileClick(file: FileModel) {
         if (file.isDirectory) {
             if (!keepSelection) selectedFiles.clear()
+            // Clear search on navigation
+            isSearchActive = false
+            searchQuery = ""
             onPathChange(file.path)
         } else {
-            // Toggle selection
             val index = selectedFiles.indexOfFirst { it.path == file.path }
             if (index != -1) {
                 selectedFiles.removeAt(index)
@@ -162,7 +222,7 @@ fun FileBrowserScreen(
     fun onProceedClick() {
         if (checkLowStorage) {
             val totalSize = selectedFiles.sumOf { it.size }
-            val availableSpace = StorageUtils.getAvailableStorage() // Internal storage check
+            val availableSpace = StorageUtils.getAvailableStorage()
 
             if (availableSpace < totalSize) {
                 showLowSpaceDialog = true
@@ -174,36 +234,63 @@ fun FileBrowserScreen(
         }
     }
 
-    // Optimization: Create a Set of selected paths for O(1) lookup during rendering
-    // selectedFiles is a SnapshotStateList, so this derivedState will update when it changes.
-    val selectedPaths by remember { androidx.compose.runtime.derivedStateOf { selectedFiles.map { it.path }.toSet() } }
+    val selectedPaths by remember { derivedStateOf { selectedFiles.map { it.path }.toSet() } }
 
-    // Hoist states for scrolling
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-    val coroutineScope = androidx.compose.runtime.rememberCoroutineScope()
+    val coroutineScope = rememberCoroutineScope()
 
     Scaffold(
         topBar = {
             CenterAlignedTopAppBar(
-                colors = androidx.compose.material3.TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surfaceVariant, // Slightly lighter than background
-                    titleContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    navigationIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    actionIconContentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background, // Match app background
+                    titleContentColor = MaterialTheme.colorScheme.onBackground,
+                    navigationIconContentColor = MaterialTheme.colorScheme.onBackground,
+                    actionIconContentColor = MaterialTheme.colorScheme.onBackground
                 ),
                 title = {
-                    val file = File(currentPath)
-                    val titleText = if (file.absolutePath == File(repository.getDefaultPath()).absolutePath || file.name == "0") "Internal Storage" else file.name
-                    Text(
-                        text = titleText,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(horizontal = 8.dp) 
-                    )
+                    if (isSearchActive) {
+                        val focusRequester = remember { FocusRequester() }
+                        val keyboardController = LocalSoftwareKeyboardController.current
+
+                        LaunchedEffect(Unit) {
+                            focusRequester.requestFocus()
+                            keyboardController?.show()
+                        }
+                        
+                        TextField(
+                            value = searchQuery,
+                            onValueChange = { searchQuery = it },
+                            placeholder = { Text("Search...") },
+                            singleLine = true,
+                            colors = TextFieldDefaults.colors(
+                                focusedContainerColor = Color.Transparent,
+                                unfocusedContainerColor = Color.Transparent,
+                                focusedIndicatorColor = Color.Transparent,
+                                unfocusedIndicatorColor = Color.Transparent
+                            ),
+                            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester)
+                        )
+                    } else {
+                        val file = File(currentPath)
+                        val titleText = if (file.absolutePath == File(repository.getDefaultPath()).absolutePath || file.name == "0") "Internal Storage" else file.name
+                        Text(
+                            text = titleText,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
                 },
                 navigationIcon = {
-                    if (File(currentPath).absolutePath != File(repository.getDefaultPath()).absolutePath) {
+                    if (isSearchActive) {
+                        IconButton(onClick = { 
+                            isSearchActive = false 
+                            searchQuery = ""
+                        }) {
+                            Icon(Icons.Default.ArrowBack, contentDescription = "Close Search")
+                        }
+                    } else if (File(currentPath).absolutePath != File(repository.getDefaultPath()).absolutePath) {
                         IconButton(onClick = {
                             val parent = File(currentPath).parent
                             if (parent != null) {
@@ -216,17 +303,102 @@ fun FileBrowserScreen(
                     }
                 },
                 actions = {
+                    if (isSearchActive && searchQuery.isNotEmpty()) {
+                        IconButton(onClick = { searchQuery = "" }) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear")
+                        }
+                    } else {
+                        IconButton(onClick = onSettingsClick) {
+                            Icon(Icons.Default.Settings, contentDescription = "Settings")
+                        }
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            BottomAppBar {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Search
+                    IconButton(onClick = { isSearchActive = true }) {
+                        Icon(Icons.Default.Search, contentDescription = "Search")
+                    }
+                    
+                    // View Toggle
                     IconButton(onClick = { isGridView = !isGridView }) {
                         Icon(
                             imageVector = if (isGridView) Icons.Default.List else Icons.Default.GridView,
                             contentDescription = "Toggle View"
                         )
                     }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(Icons.Default.Settings, contentDescription = "Settings")
+
+                    // Select All
+                    IconButton(onClick = {
+                        if (displayedFiles.all { it.path in selectedPaths }) {
+                             selectedFiles.removeAll { file -> displayedFiles.any { it.path == file.path && !it.isDirectory } }
+                        } else {
+                             // Only select files, often we don't select folders for sharing
+                             val filesToSelect = displayedFiles.filter { !it.isDirectory }
+                             // Add only distinct
+                             filesToSelect.forEach { 
+                                 if (selectedFiles.none { sel -> sel.path == it.path }) {
+                                     selectedFiles.add(it)
+                                 }
+                             }
+                        }
+                    }) {
+                        Icon(Icons.Default.SelectAll, contentDescription = "Select All")
+                    }
+                    
+                    // Refresh
+                    IconButton(onClick = { refreshFiles() }) {
+                        Icon(Icons.Default.Refresh, contentDescription = "Refresh")
+                    }
+
+                    // Sort
+                    Box {
+                        IconButton(onClick = { showSortMenu = true }) {
+                            Icon(Icons.Default.Sort, contentDescription = "Sort")
+                        }
+                        DropdownMenu(
+                            expanded = showSortMenu,
+                            onDismissRequest = { showSortMenu = false }
+                        ) {
+                            SortOption.values().forEach { option ->
+                                DropdownMenuItem(
+                                    text = { 
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(option.name.lowercase().replaceFirstChar { it.uppercase() })
+                                            if (sortOption == option) {
+                                                Spacer(modifier = Modifier.width(8.dp))
+                                                Icon(
+                                                    // In many apps: Arrow UP = Ascending (A->Z, 0->9). Arrow DOWN = Descending.
+                                                    // Let's use ArrowUpward for Ascending.
+                                                    imageVector = if (isSortAscending) Icons.Default.ArrowUpward else Icons.Default.ArrowDownward,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                            }
+                                        }
+                                    },
+                                    onClick = { 
+                                        if (sortOption == option) {
+                                            isSortAscending = !isSortAscending
+                                        } else {
+                                            sortOption = option
+                                            isSortAscending = true // Default to asc for new sort
+                                        }
+                                        showSortMenu = false
+                                    }
+                                )
+                            }
+                        }
                     }
                 }
-            )
+            }
         },
         floatingActionButton = {
             if (selectedFiles.isNotEmpty()) {
@@ -239,7 +411,7 @@ fun FileBrowserScreen(
                             if (targetAppIcon != null) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Image(
-                                    painter = com.google.accompanist.drawablepainter.rememberDrawablePainter(drawable = targetAppIcon),
+                                    painter = rememberDrawablePainter(drawable = targetAppIcon),
                                     contentDescription = "Target App",
                                     modifier = Modifier.size(24.dp)
                                 )
@@ -250,10 +422,14 @@ fun FileBrowserScreen(
             }
         }
     ) { paddingValues ->
-        Box(modifier = Modifier.padding(paddingValues).fillMaxSize()) {
-            if (files.isEmpty()) {
+        Box(modifier = Modifier
+            .padding(paddingValues)
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background)) { // Enforce background
+            
+            if (displayedFiles.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text("No files found", style = MaterialTheme.typography.bodyLarge)
+                    Text(if (isSearchActive) "No results found" else "No files found", style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
                 if (isGridView) {
@@ -264,10 +440,10 @@ fun FileBrowserScreen(
                         modifier = Modifier.fillMaxSize()
                     ) {
                         items(
-                            count = files.size,
-                            key = { index -> files[index].path }
+                            count = displayedFiles.size,
+                            key = { index -> displayedFiles[index].path }
                         ) { index ->
-                            val file = files[index]
+                            val file = displayedFiles[index]
                             val isSelected = file.path in selectedPaths
                             FileGridItem(
                                 file = file.copy(isSelected = isSelected),
@@ -279,14 +455,14 @@ fun FileBrowserScreen(
                 } else {
                     LazyColumn(
                         state = listState,
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp, start = 8.dp, end = 24.dp), // Extra padding for fast scroll
+                        contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp, start = 8.dp, end = 24.dp),
                         modifier = Modifier.fillMaxSize()
                     ) {
                          items(
-                            count = files.size,
-                            key = { index -> files[index].path }
+                            count = displayedFiles.size,
+                            key = { index -> displayedFiles[index].path }
                          ) { index ->
-                            val file = files[index]
+                            val file = displayedFiles[index]
                             val isSelected = file.path in selectedPaths
                             FileListItem(
                                 file = file.copy(isSelected = isSelected),
@@ -298,9 +474,8 @@ fun FileBrowserScreen(
                 }
 
                 // Fast Scroll Implementation
-                // Fast Scroll Implementation
-                val scrollStateValues = remember(isGridView, listState, gridState, files) {
-                    androidx.compose.runtime.derivedStateOf {
+                val scrollStateValues = remember(isGridView, listState, gridState, displayedFiles) {
+                    derivedStateOf {
                         val totalItems: Int
                         val visibleItemsCount: Int
                         val firstIndex: Int
@@ -327,32 +502,23 @@ fun FileBrowserScreen(
                         
                         if (totalItems == 0 || visibleItemsCount == 0 || itemSize <= 0) 0f to 0f
                         else {
-                             // Sizing Stability: Use Viewport / TotalContent estimation
-                             // This stops the scrollbar from jumping when visibleItemsCount fluctuates by 1
-                             val viewportHeight: Int
-                             if (isGridView) {
-                                 viewportHeight = gridState.layoutInfo.viewportSize.height
-                             } else {
-                                 viewportHeight = listState.layoutInfo.viewportSize.height
-                             }
+                             val viewportHeight: Int = if (isGridView) gridState.layoutInfo.viewportSize.height else listState.layoutInfo.viewportSize.height
                              
                              val estimatedTotalContentHeight = itemSize.toFloat() * totalItems
                              val fraction = (viewportHeight.toFloat() / estimatedTotalContentHeight).coerceIn(0f, 1f)
-
                              val offsetFraction = firstOffset.toFloat() / itemSize.toFloat()
                              val effectiveIndex = firstIndex + offsetFraction
                              val maxIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
                              val progress = (effectiveIndex / maxIndex.toFloat()).coerceIn(0f, 1f)
-                             
                              progress to fraction
                         }
                     }
                 }
 
                 FastScroller(
-                    files = files,
+                    files = displayedFiles,
                     scrollState = scrollStateValues,
-                    modifier = Modifier.padding(top = 16.dp, bottom = 16.dp), // Fix boundaries
+                    modifier = Modifier.padding(top = 16.dp, bottom = 16.dp),
                     onScrollTo = { progress ->
                          coroutineScope.launch {
                             val totalItems = if (isGridView) {
@@ -361,22 +527,15 @@ fun FileBrowserScreen(
                                 listState.layoutInfo.totalItemsCount
                             }
 
-
-                            
-                            // Smooth Scrolling Calculation
-                            // Estimate total content height based on the first item's size
                             val itemSize = if (isGridView) {
                                 gridState.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.height ?: 0
                             } else {
                                 listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: 0
                             }
                             
-                            
                             if (itemSize > 0) {
-                                // Calculate exact target pixel in the entire list
                                 val totalPixels = totalItems * itemSize.toFloat()
                                 val targetPixels = progress * totalPixels
-                                
                                 val targetIndex = (targetPixels / itemSize).toInt().coerceIn(0, totalItems - 1)
                                 val offset = (targetPixels % itemSize).toInt()
                                 
@@ -426,22 +585,15 @@ fun FastScroller(
 ) {
     if (files.size < 10) return 
 
-    // Use State objects directly to avoid recomposition when values change
     val isDraggingState = remember { mutableStateOf(false) }
     val currentLetterState = remember { mutableStateOf<Char?>(null) }
     val currentYState = remember { mutableStateOf(0f) }
     val listSize = files.size
 
-    androidx.compose.foundation.layout.BoxWithConstraints(modifier = modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
         val trackHeight = constraints.maxHeight.toFloat()
-        val minThumbHeight = with(androidx.compose.ui.platform.LocalDensity.current) { 48.dp.toPx() }
+        val minThumbHeight = with(LocalDensity.current) { 48.dp.toPx() }
         
-        // Use a persistent object for drag logic to avoid recomposing the pointerInput block
-        // However, pointerInput captures 'listSize', 'trackHeight'. trackHeight is from BoxWithConstraints which might change on resize.
-        // We need to access scrollState inside drag logic (for 'thumbHeight' calculation if we want precision).
-        // But for now, simplified drag logic is okay.
-
-        // Scroll Bar Touch Area
         Box(
             modifier = Modifier
                 .align(Alignment.CenterEnd)
@@ -460,7 +612,6 @@ fun FastScroller(
                             val y = change.position.y.coerceIn(0f, trackHeight)
                             currentYState.value = y
                             
-                            // We need thumbHeight here to be precise.
                             val (_, fraction) = scrollState.value
                             val thumbHeight = (trackHeight * fraction).coerceAtLeast(minThumbHeight)
                             val travelDistance = trackHeight - thumbHeight
@@ -478,7 +629,6 @@ fun FastScroller(
                     )
                 }
         ) {
-              // Dynamic Thumb using Layout Phase to avoid Recomposition
               Box(
                   modifier = Modifier
                       .align(Alignment.TopCenter)
@@ -487,7 +637,6 @@ fun FastScroller(
                           val (progress, fraction) = scrollState.value
                           val thumbHeightValue = (trackHeight * fraction).coerceAtLeast(minThumbHeight)
                           
-                          // Measure the thumb with the calculated height
                           val placeable = measurable.measure(
                               constraints.copy(
                                   minHeight = thumbHeightValue.toInt(),
@@ -496,7 +645,6 @@ fun FastScroller(
                           )
                           
                           val travelDistance = trackHeight - thumbHeightValue
-                          // Use .value to read state in Layout phase without causing Recomposition of the parent
                           val isDragging = isDraggingState.value
                           val currentY = currentYState.value
                           
@@ -511,12 +659,10 @@ fun FastScroller(
                               placeable.place(0, effectiveY.toInt())
                           }
                       }
-                      .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.RoundedCornerShape(2.dp))
+                      .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
               )
         }
 
-
-        // Separated Bubble Component to isolate Recomposition
         FastScrollBubble(
             isDraggingState = isDraggingState,
             currentLetterState = currentLetterState,
@@ -537,20 +683,19 @@ fun FastScrollBubble(
     val currentLetter = currentLetterState.value
     val currentY = currentYState.value
 
-        // Center the bubble on the touch position
     if (isDragging && currentLetter != null) {
         val bubbleSize = 64.dp
-        val bubbleSizePx = with(androidx.compose.ui.platform.LocalDensity.current) { bubbleSize.toPx() }
+        val bubbleSizePx = with(LocalDensity.current) { bubbleSize.toPx() }
         val bubbleY = (currentY - bubbleSizePx / 2f).coerceIn(0f, trackHeight - bubbleSizePx) 
         
         Box(
             modifier = Modifier
-                .fillMaxSize() // Fill parent to allow alignment
-                .wrapContentSize(Alignment.TopEnd) // Then align the box content
-                .offset { androidx.compose.ui.unit.IntOffset(0, bubbleY.toInt()) }
+                .fillMaxSize() 
+                .wrapContentSize(Alignment.TopEnd) 
+                .offset { IntOffset(0, bubbleY.toInt()) }
                 .padding(end = 48.dp) 
                 .size(bubbleSize)
-                .background(MaterialTheme.colorScheme.primary, androidx.compose.foundation.shape.CircleShape),
+                .background(MaterialTheme.colorScheme.primary, CircleShape),
             contentAlignment = Alignment.Center
         ) {
             Text(
@@ -563,40 +708,14 @@ fun FastScrollBubble(
 }
 
 fun shareFiles(context: android.content.Context, files: List<FileModel>, targetAppPackageName: String?) {
-    // Generate Uri using FileProvider would be best practice, but for internal storage / sdcard
-    // usually we need a FileProvider. 
-    // However, the prompt implies "browse their device's entire internal storage".
-    // If we are sharing to Google Photos, we should use FileProvider to be safe on Android N+.
-    // But initializing FileProvider requires manifest and xml setup.
-    // I will try to use simple Uri.fromFile first if targetSdk < 24 but wait targetSdk is 34.
-    // MUST USE FILEPROVIDER.
-    // I need to add FileProvider to manifest and create provider_paths.xml.
-    // But wait, "Permission: MANAGE_EXTERNAL_STORAGE" gives us raw file access.
-    // Sharing to other apps requires granting them read uri permission.
-    
-    // For simplicity in this generated code without complex fileprovider setup which varies by path:
-    // I will implement a basic sharing intent. 
-    // CRITICAL: Android 7.0+ throws FileUriExposedException. We MUST use FileProvider.
-    // So I need to add that step to the plan if I haven't.
-    // But since I'm in the middle of executing, I'll add the FileProvider setup now.
-    
-    // Actually, let's see if I can do it without FileProvider if I'm "system" or root?
-    // No, I'm a normal app.
-    // Okay, I will add FileProvider support.
-    
     if (files.isEmpty()) return
 
     val uris = ArrayList<Uri>()
-    // We need a helper to get URI.
-    // For now, I'll put a placeholder TODO or try to implement FileProvider on the fly.
-    // I'll assume we can use `androidx.core.content.FileProvider`.
-    
     try {
         files.forEach { fileModel ->
-            // Use FileProvider
             val uri = androidx.core.content.FileProvider.getUriForFile(
                 context,
-                "${context.packageName}.provider", // Matches manifest
+                "${context.packageName}.provider", 
                 fileModel.file
             )
             uris.add(uri)
@@ -610,8 +729,6 @@ fun shareFiles(context: android.content.Context, files: List<FileModel>, targetA
                 action = Intent.ACTION_SEND_MULTIPLE
                 putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
             }
-            // type = "*/*" // Or specific mime type like "image/*"
-            // Set mime type based on first file?
             val mimeType = if (files.any { it.extension in setOf("mp4", "mkv", "webm", "avi") }) "video/*" else "image/*"
             type = mimeType
             
@@ -627,8 +744,6 @@ fun shareFiles(context: android.content.Context, files: List<FileModel>, targetA
                      setPackage(targetAppPackageName)
                 }
             }
-            // If null, we don't set package, allowing system chooser to resolve
-            
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         
@@ -641,10 +756,11 @@ fun shareFiles(context: android.content.Context, files: List<FileModel>, targetA
         try {
             context.startActivity(shareIntent)
         } catch (e: android.content.ActivityNotFoundException) {
-            android.widget.Toast.makeText(context, "Selected app not found or nothing available to share.", android.widget.Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, "Selected app not found or nothing available to share.", Toast.LENGTH_SHORT).show()
         }
     } catch (e: Exception) {
-         android.widget.Toast.makeText(context, "Error preparing share: ${e.message}", android.widget.Toast.LENGTH_LONG).show()
+         Toast.makeText(context, "Error preparing share: ${e.message}", Toast.LENGTH_LONG).show()
          e.printStackTrace()
     }
 }
+
