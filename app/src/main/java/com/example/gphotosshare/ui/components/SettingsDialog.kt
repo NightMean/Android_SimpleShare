@@ -4,6 +4,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -46,10 +47,11 @@ fun SettingsDialog(
     currentTargetAppPackage: String?,
     currentKeepSelection: Boolean,
     currentShowThumbnails: Boolean,
+    currentCheckLowStorage: Boolean,
     selectedFileCount: Int,
     onDismiss: () -> Unit,
     onClearSelection: () -> Unit,
-    onSave: (String, String?, Boolean, Boolean) -> Unit // path, componentName, keepSelection, showThumbnails
+    onSave: (String, String?, Boolean, Boolean, Boolean) -> Unit // path, componentName, keepSelection, showThumbnails, checkLowStorage
 ) {
     var path by remember { mutableStateOf(currentDefaultPath) }
     // Initialize with passed value. componentName is "pkg/cls" or just "pkg" (backward compat)
@@ -58,6 +60,7 @@ fun SettingsDialog(
     var selectedComponent by remember { mutableStateOf(currentTargetAppPackage ?: defaultPhotosPackage) }
     var keepSelection by remember { mutableStateOf(currentKeepSelection) }
     var showThumbnails by remember { mutableStateOf(currentShowThumbnails) }
+    var checkLowStorage by remember { mutableStateOf(currentCheckLowStorage) }
     
     val context = androidx.compose.ui.platform.LocalContext.current
     val appRepository = remember { AppRepository(context) }
@@ -100,7 +103,7 @@ fun SettingsDialog(
         onDismissRequest = onDismiss,
         title = { Text("Settings") },
         text = {
-            Column(modifier = Modifier.fillMaxWidth()) {
+            Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 Text("Default Path")
                 Spacer(modifier = Modifier.height(8.dp))
                 OutlinedTextField(
@@ -159,9 +162,25 @@ fun SettingsDialog(
                 }
                 
                 Spacer(modifier = Modifier.height(8.dp))
-
-
-
+                // Toggle: Check Low Storage
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clickable { checkLowStorage = !checkLowStorage }
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                         Text("Check Free Space")
+                         Text(
+                            "Warn before sharing if internal storage is low",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    androidx.compose.material3.Switch(
+                        checked = checkLowStorage,
+                        onCheckedChange = { checkLowStorage = it }
+                    )
+                }
+                
                 Spacer(modifier = Modifier.height(16.dp))
                 Text("Default Share App")
                 Spacer(modifier = Modifier.height(8.dp))
@@ -221,7 +240,7 @@ fun SettingsDialog(
         },
         confirmButton = {
             Button(onClick = { 
-                onSave(path, selectedComponent, keepSelection, showThumbnails) 
+                onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage) 
             }) {
                 Text("Save")
             }

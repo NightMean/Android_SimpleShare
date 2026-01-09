@@ -46,7 +46,9 @@ class MainActivity : ComponentActivity() {
     private val KEY_DEFAULT_PATH = "default_path"
     private val KEY_TARGET_APP = "target_app_package"
     private val KEY_KEEP_SELECTION = "keep_selection"
+
     private val KEY_SHOW_THUMBNAILS = "show_thumbnails"
+    private val KEY_CHECK_LOW_STORAGE = "check_low_storage"
 
     private lateinit var prefs: SharedPreferences
 
@@ -75,14 +77,18 @@ class MainActivity : ComponentActivity() {
         val savedDefaultPath = prefs.getString(KEY_DEFAULT_PATH, FileRepository().getDefaultPath()) ?: FileRepository().getDefaultPath()
         val savedTargetApp = prefs.getString(KEY_TARGET_APP, null)
         val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
+
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
+        val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) // Default false, as per request
 
         
         // We initialize currentPath with savedDefaultPath, but it's now state managed here
         var currentPath by remember { mutableStateOf(savedDefaultPath) }
         var targetAppPackage by remember { mutableStateOf(savedTargetApp) }
         var keepSelection by remember { mutableStateOf(savedKeepSelection) }
+
         var showThumbnails by remember { mutableStateOf(savedShowThumbnails) }
+        var checkLowStorage by remember { mutableStateOf(savedCheckLowStorage) }
 
         
         // Hoisted selection state
@@ -116,13 +122,14 @@ class MainActivity : ComponentActivity() {
             
             FileBrowserScreen(
                 repository = repository,
-                initialPath = savedDefaultPath,
+
                 currentPath = currentPath,
                 onPathChange = { newPath -> currentPath = newPath },
                 selectedFiles = selectedFiles,
                 targetAppPackageName = targetAppPackage,
                 keepSelection = keepSelection,
                 showThumbnails = showThumbnails,
+                checkLowStorage = checkLowStorage,
                 onSettingsClick = { showSettings = true }
             )
             
@@ -133,10 +140,11 @@ class MainActivity : ComponentActivity() {
                     currentTargetAppPackage = targetAppPackage,
                     currentKeepSelection = keepSelection,
                     currentShowThumbnails = showThumbnails,
+                    currentCheckLowStorage = checkLowStorage,
                     selectedFileCount = selectedFiles.size,
                     onDismiss = { showSettings = false },
                     onClearSelection = { selectedFiles.clear() },
-                    onSave = { newPath, newAppPackage, newKeepSelection, newShowThumbnails ->
+                    onSave = { newPath, newAppPackage, newKeepSelection, newShowThumbnails, newCheckLowStorage ->
                         val editor = prefs.edit()
                         editor.putString(KEY_DEFAULT_PATH, newPath)
                         if (newAppPackage != null) {
@@ -154,6 +162,11 @@ class MainActivity : ComponentActivity() {
                         
 
                         
+
+                        
+                        editor.putBoolean(KEY_CHECK_LOW_STORAGE, newCheckLowStorage)
+                        checkLowStorage = newCheckLowStorage
+
                         editor.apply()
                         
                         showSettings = false

@@ -19,17 +19,12 @@ class AppRepository(private val context: Context) {
         // User reports missing apps. Let's try MATCH_ALL flag which is 131072.
         // For Tiramisu+, we use ResolveInfoFlags.
         
-        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-             PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
-        } else {
-             PackageManager.MATCH_ALL
-        }
-
         val resolveInfos = try {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                packageManager.queryIntentActivities(intent, flags as PackageManager.ResolveInfoFlags)
+                val flags = PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_ALL.toLong())
+                packageManager.queryIntentActivities(intent, flags)
             } else {
-                packageManager.queryIntentActivities(intent, flags as Int)
+                packageManager.queryIntentActivities(intent, PackageManager.MATCH_ALL)
             }
         } catch (e: Exception) {
             emptyList()

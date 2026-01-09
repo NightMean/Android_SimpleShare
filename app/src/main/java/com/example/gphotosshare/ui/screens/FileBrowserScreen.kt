@@ -79,13 +79,14 @@ import kotlinx.coroutines.withContext
 @Composable
 fun FileBrowserScreen(
     repository: FileRepository,
-    initialPath: String, // Kept for initialization if needed, but we rely on currentPath
+
     currentPath: String,
     onPathChange: (String) -> Unit,
     selectedFiles: MutableList<FileModel>, 
     targetAppPackageName: String?,
     keepSelection: Boolean,
     showThumbnails: Boolean,
+    checkLowStorage: Boolean,
     onSettingsClick: () -> Unit
 ) {
     // var currentPath by remember { mutableStateOf(initialPath) } // Hoisted
@@ -159,11 +160,15 @@ fun FileBrowserScreen(
     }
 
     fun onProceedClick() {
-        val totalSize = selectedFiles.sumOf { it.size }
-        val availableSpace = StorageUtils.getAvailableStorage() // Internal storage check
+        if (checkLowStorage) {
+            val totalSize = selectedFiles.sumOf { it.size }
+            val availableSpace = StorageUtils.getAvailableStorage() // Internal storage check
 
-        if (availableSpace < totalSize) {
-            showLowSpaceDialog = true
+            if (availableSpace < totalSize) {
+                showLowSpaceDialog = true
+            } else {
+                shareFiles(context, selectedFiles, targetAppPackageName)
+            }
         } else {
             shareFiles(context, selectedFiles, targetAppPackageName)
         }
@@ -309,7 +314,7 @@ fun FileBrowserScreen(
                             visibleItemsCount = visibleInfo.size
                             firstIndex = gridState.firstVisibleItemIndex
                             firstOffset = gridState.firstVisibleItemScrollOffset
-                            itemSize = (visibleInfo.firstOrNull() as? androidx.compose.foundation.lazy.grid.LazyGridItemInfo)?.size?.height ?: 0
+                            itemSize = gridState.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.height ?: 0
                         } else {
                             val layout = listState.layoutInfo
                             totalItems = layout.totalItemsCount
@@ -317,7 +322,7 @@ fun FileBrowserScreen(
                             visibleItemsCount = visibleInfo.size
                             firstIndex = listState.firstVisibleItemIndex
                             firstOffset = listState.firstVisibleItemScrollOffset
-                            itemSize = (visibleInfo.firstOrNull() as? androidx.compose.foundation.lazy.LazyListItemInfo)?.size ?: 0
+                            itemSize = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: 0
                         }
                         
                         if (totalItems == 0 || visibleItemsCount == 0 || itemSize <= 0) 0f to 0f
@@ -350,27 +355,20 @@ fun FileBrowserScreen(
                     modifier = Modifier.padding(top = 16.dp, bottom = 16.dp), // Fix boundaries
                     onScrollTo = { progress ->
                          coroutineScope.launch {
-                            val totalItems: Int
-                            val visibleItemsCount: Int
-                            
-                            if (isGridView) {
-                                val layout = gridState.layoutInfo
-                                totalItems = layout.totalItemsCount
-                                visibleItemsCount = layout.visibleItemsInfo.size
+                            val totalItems = if (isGridView) {
+                                gridState.layoutInfo.totalItemsCount
                             } else {
-                                val layout = listState.layoutInfo
-                                totalItems = layout.totalItemsCount
-                                visibleItemsCount = layout.visibleItemsInfo.size
+                                listState.layoutInfo.totalItemsCount
                             }
 
-                            val maxIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
+
                             
                             // Smooth Scrolling Calculation
                             // Estimate total content height based on the first item's size
                             val itemSize = if (isGridView) {
-                                (gridState.layoutInfo.visibleItemsInfo.firstOrNull() as? androidx.compose.foundation.lazy.grid.LazyGridItemInfo)?.size?.height ?: 0
+                                gridState.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.height ?: 0
                             } else {
-                                (listState.layoutInfo.visibleItemsInfo.firstOrNull() as? androidx.compose.foundation.lazy.LazyListItemInfo)?.size ?: 0
+                                listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: 0
                             }
                             
                             

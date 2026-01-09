@@ -152,7 +152,7 @@ fun FileThumbnail(
             )
         }
     } else {
-        val context = LocalContext.current
+
         val isVideo = file.extension in setOf("mp4", "mkv", "webm", "avi")
         val isImage = file.extension in setOf("jpg", "jpeg", "png", "gif", "heic", "webp")
         
