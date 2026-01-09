@@ -65,6 +65,15 @@ fun FileListItem(
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
+            if (!file.isDirectory) {
+                Text(
+                    text = "${formatFileSize(file.size)} • ${formatFileDate(LocalContext.current, file.file.lastModified())}",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
         }
 
         if (!file.isDirectory) {
@@ -192,4 +201,18 @@ fun FileThumbnail(
             }
         }
     }
+}
+
+fun formatFileSize(size: Long): String {
+    if (size <= 0) return "0 B"
+    val units = arrayOf("B", "KB", "MB", "GB", "TB")
+    val digitGroups = (Math.log10(size.toDouble()) / Math.log10(1024.0)).toInt()
+    return String.format(java.util.Locale.US, "%.1f %s", size / Math.pow(1024.0, digitGroups.toDouble()), units[digitGroups])
+}
+
+fun formatFileDate(context: android.content.Context, timestamp: Long): String {
+    val date = java.util.Date(timestamp)
+    val dateFormat = android.text.format.DateFormat.getDateFormat(context)
+    val timeFormat = android.text.format.DateFormat.getTimeFormat(context)
+    return "${dateFormat.format(date)} ${timeFormat.format(date)}"
 }

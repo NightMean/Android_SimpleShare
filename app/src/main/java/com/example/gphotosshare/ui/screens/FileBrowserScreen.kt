@@ -407,7 +407,7 @@ fun FileBrowserScreen(
                     icon = { Icon(Icons.Default.Share, contentDescription = "Share") },
                     text = { 
                          Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("Next (${selectedFiles.size})")
+                            Text("Share (${selectedFiles.size})")
                             if (targetAppIcon != null) {
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Image(
