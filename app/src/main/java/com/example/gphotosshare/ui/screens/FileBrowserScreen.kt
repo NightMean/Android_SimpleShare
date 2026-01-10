@@ -721,8 +721,7 @@ fun FileBrowserScreen(
                                 FileGridItem(
                                     file = file.copy(isSelected = isSelected),
                                     showThumbnail = showThumbnails,
-                                    isPressed = (index == pressedItemIndex),
-                                    onClick = { handleFileClickWithDebounce(file) }
+                                    isPressed = (index == pressedItemIndex)
                                 )
                             }
                         }

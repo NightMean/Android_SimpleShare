@@ -115,8 +115,7 @@ fun FileListItem(
 fun FileGridItem(
     file: FileModel,
     showThumbnail: Boolean,
-    isPressed: Boolean,
-    onClick: () -> Unit
+    isPressed: Boolean
 ) {
     val interactionSource = remember { MutableInteractionSource() }
 
@@ -231,11 +230,11 @@ fun FileThumbnail(
             contentAlignment = Alignment.Center
         ) {
             // 1. The Base Icon (Always visible underneath, acts as placeholder/fallback)
-            // If unknown (fallback), we might want a "Question Mark" indicator overlay or just the file icon.
-            // Requirement: "Any other file should have an icon with a file and a question mark next to it."
-            // We can compose this.
-            
-            if (!isVideo && !isImage && !isAudio && !isArchive && !isPdf && !isDoc && !isApp) {
+            // Fix: Hide the base icon if we are showing a thumbnail for a supported image/video type, 
+            // to prevent it showing through transparent PNGs.
+            val showBaseIcon = if (showThumbnail && (isImage || isVideo)) false else true
+
+            if (showBaseIcon && !isVideo && !isImage && !isAudio && !isArchive && !isPdf && !isDoc && !isApp) {
                  Box(contentAlignment = Alignment.BottomEnd) {
                      Icon(
                         imageVector = Icons.Default.InsertDriveFile,
@@ -250,7 +249,7 @@ fun FileThumbnail(
                         modifier = Modifier.size(12.dp).align(Alignment.Center) // Overlay center or make it a composite
                     )
                  }
-            } else {
+            } else if (showBaseIcon) {
                 Icon(
                     imageVector = iconVector,
                     contentDescription = null,
@@ -261,6 +260,12 @@ fun FileThumbnail(
 
             // 2. The Image (Only if enabled and is visual media)
             if (showThumbnail && (isImage || isVideo)) {
+                // Ensure base icon is definitely hidden (it's handled by showBaseIcon logic above, 
+                // but let's double check logic there is correct: 
+                // val showBaseIcon = if (showThumbnail && (isImage || isVideo)) false else true
+                // This logic is sound. If user sees icon, then isImage/isVideo MUST be false for that file.
+                // Or showThumbnail is false.
+                
                 com.bumptech.glide.integration.compose.GlideImage(
                     model = file.file,
                     contentDescription = "Thumbnail",

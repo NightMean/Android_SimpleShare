@@ -215,6 +215,14 @@ fun SettingsScreen(
                 actions = {
                     if (pageState == SettingsPage.MAIN) {
                          TextButton(onClick = {
+                             // Validation
+                             if (filterMode == "CUSTOM") {
+                                 val hasValidChar = customExtensions.any { it.isLetterOrDigit() }
+                                 if (!hasValidChar) {
+                                     android.widget.Toast.makeText(context, "Please enter at least one file extension (e.g. pdf, zip, 7z)", android.widget.Toast.LENGTH_LONG).show()
+                                     return@TextButton
+                                 }
+                             }
                              onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
                          }) {
                              Text("Save")
@@ -432,19 +440,24 @@ fun SettingsScreen(
                     }
                     
                     item(key = "filter_selector") {
-                        com.example.gphotosshare.ui.components.FilterModeSelector(
-                           selectedMode = filterMode,
-                           customExtensions = customExtensions,
-                           onModeSelected = { filterMode = it },
-                           onCustomExtensionsChanged = { customExtensions = it }
-                        )
+                        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+                            com.example.gphotosshare.ui.components.FilterModeSelector(
+                                selectedMode = filterMode,
+                                customExtensions = customExtensions,
+                                onModeSelected = { filterMode = it },
+                                onCustomExtensionsChanged = { customExtensions = it }
+                            )
+                        }
                     }
 
                     item(key = "footer_reset") {
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
                              Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                  TextButton(
-                                     onClick = { onReset() }
+                                     onClick = { 
+                                         path = currentDefaultPath // Reset path to default
+                                         onReset() 
+                                     }
                                  ) {
                                      Text("Reset to Defaults", color = MaterialTheme.colorScheme.error)
                                  }

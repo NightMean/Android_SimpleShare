@@ -56,7 +56,11 @@ fun SetupScreen(
     onAppSelected: (String) -> Unit,
     onFinish: () -> Unit,
     onNavigateToAppSelection: () -> Unit,
-    onBackFromAppSelection: () -> Unit
+    onBackFromAppSelection: () -> Unit,
+    currentFilterMode: String,
+    currentCustomExtensions: String,
+    onFilterModeChange: (String) -> Unit,
+    onCustomExtensionsChange: (String) -> Unit
 ) {
     if (currentScreen == com.example.gphotosshare.ui.Screen.SETUP_APP_SELECTION) {
         // App Selection View
@@ -237,10 +241,45 @@ fun SetupScreen(
                     }
                 }
                 
+
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // Step 3: File Visibility
+                Text(
+                    text = "3. File Visibility",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Text(
+                    text = "Choose what files to see. You can change this anytime in Settings.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                )
+
+                com.example.gphotosshare.ui.components.FilterModeSelector(
+                    selectedMode = currentFilterMode,
+                    customExtensions = currentCustomExtensions,
+                    onModeSelected = onFilterModeChange,
+                    onCustomExtensionsChanged = onCustomExtensionsChange
+                )
+                
                 Spacer(modifier = Modifier.height(48.dp))
                 
+                
                 Button(
-                    onClick = onFinish,
+                    onClick = {
+                        // Validation
+                        if (currentFilterMode == "CUSTOM") {
+                            val hasValidChar = currentCustomExtensions.any { it.isLetterOrDigit() }
+                            if (!hasValidChar) {
+                                android.widget.Toast.makeText(context, "Please enter at least one file extension (e.g. pdf, zip, 7z)", android.widget.Toast.LENGTH_LONG).show()
+                                return@Button
+                            }
+                        }
+                        onFinish() 
+                    },
                     enabled = permissionGranted && selectedTargetApp != null,
                     modifier = Modifier.fillMaxWidth().height(56.dp)
                 ) {

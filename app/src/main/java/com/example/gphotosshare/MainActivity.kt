@@ -91,7 +91,7 @@ class MainActivity : ComponentActivity() {
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
         val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) 
         val savedQuickOpen = prefs.getBoolean(KEY_QUICK_OPEN, false) 
-        val savedFilterMode = prefs.getString(KEY_FILTER_MODE, "PRESET_MEDIA") ?: "PRESET_MEDIA"
+        val savedFilterMode = prefs.getString(KEY_FILTER_MODE, "PRESET_ALL") ?: "PRESET_ALL"
         val savedCustomExtensions = prefs.getString(KEY_CUSTOM_EXTENSIONS, "") ?: ""
 
         // We initialize currentPath with savedDefaultPath
@@ -107,6 +107,8 @@ class MainActivity : ComponentActivity() {
         val allowedExtensions = remember(filterMode, customExtensions) {
             if (filterMode == "PRESET_MEDIA") {
                 setOf("jpg", "jpeg", "png", "gif", "mp4", "mkv", "webm", "avi", "heic", "webp") // Media Preset
+            } else if (filterMode == "PRESET_ALL") {
+                emptySet() // Empty set means "All" in our logic (need to verify this in Repo/Browser)
             } else {
                 // Custom Parsing
                 customExtensions.split(",")
@@ -233,11 +235,11 @@ class MainActivity : ComponentActivity() {
                         editor.apply()
                         
                         targetAppPackage = null
-                        keepSelection = false // Default
+                        keepSelection = true // Default (Verified from settings usage) Wait, savedKeepSelection default was true.
                         showThumbnails = true // Default
                         checkLowStorage = false // Default
                         quickOpen = false // Default
-                        filterMode = "PRESET_MEDIA"
+                        filterMode = "PRESET_ALL"
                         customExtensions = ""
                         
                         selectedFiles.clear()
@@ -261,6 +263,20 @@ class MainActivity : ComponentActivity() {
                          val editor = prefs.edit()
                          editor.putString(KEY_TARGET_APP, app)
                          editor.apply()
+                    },
+                    currentFilterMode = filterMode,
+                    currentCustomExtensions = customExtensions,
+                    onFilterModeChange = { mode ->
+                        filterMode = mode
+                        val editor = prefs.edit()
+                        editor.putString(KEY_FILTER_MODE, mode)
+                        editor.apply()
+                    },
+                    onCustomExtensionsChange = { ext ->
+                        customExtensions = ext
+                        val editor = prefs.edit()
+                        editor.putString(KEY_CUSTOM_EXTENSIONS, ext)
+                        editor.apply()
                     },
                     onFinish = {
                         currentScreen = com.example.gphotosshare.ui.Screen.BROWSER

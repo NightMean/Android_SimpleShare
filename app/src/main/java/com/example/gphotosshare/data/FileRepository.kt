@@ -17,7 +17,9 @@ class FileRepository {
             // If the set is empty, we might default to nothing or everything? 
             // Design decision: If set is empty, show nothing (except folders). 
             // Wrapper will ensure set is populated.
-            if (isDirectory || allowedExtensions.contains(extension)) {
+            // Allow directories OR if allowedExtensions is EMPTY (All Files) OR if extension is allowed
+            // Empty set now means "All Files"
+            if (isDirectory || allowedExtensions.isEmpty() || allowedExtensions.contains(extension)) {
                 FileModel(
                     file = file,
                     name = file.name,
