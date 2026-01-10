@@ -44,9 +44,11 @@ fun SettingsScreen(
     currentShowThumbnails: Boolean,
     currentCheckLowStorage: Boolean,
     currentQuickOpen: Boolean,
+    currentFilterMode: String, // "PRESET_MEDIA" or "CUSTOM"
+    currentCustomExtensions: String,
     selectedFileCount: Int,
     onBack: () -> Unit,
-    onSave: (String, String?, Boolean, Boolean, Boolean, Boolean) -> Unit,
+    onSave: (String, String?, Boolean, Boolean, Boolean, Boolean, String, String) -> Unit,
     onReset: () -> Unit
 ) {
     var path by remember { mutableStateOf(currentDefaultPath) }
@@ -55,6 +57,8 @@ fun SettingsScreen(
     var showThumbnails by remember { mutableStateOf(currentShowThumbnails) }
     var checkLowStorage by remember { mutableStateOf(currentCheckLowStorage) }
     var quickOpen by remember { mutableStateOf(currentQuickOpen) }
+    var filterMode by remember { mutableStateOf(currentFilterMode) }
+    var customExtensions by remember { mutableStateOf(currentCustomExtensions) }
     
     // Internal Navigation State
     var pageState by remember { mutableStateOf(SettingsPage.MAIN) }
@@ -79,7 +83,9 @@ fun SettingsScreen(
                keepSelection != currentKeepSelection ||
                showThumbnails != currentShowThumbnails ||
                checkLowStorage != currentCheckLowStorage ||
-               quickOpen != currentQuickOpen
+               quickOpen != currentQuickOpen ||
+               filterMode != currentFilterMode ||
+               customExtensions != currentCustomExtensions
     }
 
     var showUnsavedDialog by remember { mutableStateOf(false) }
@@ -107,7 +113,7 @@ fun SettingsScreen(
             text = { Text("You have unsaved changes. Do you want to save them?") },
             confirmButton = {
                 TextButton(onClick = {
-                    onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen)
+                    onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
                     showUnsavedDialog = false
                     onBack() // Redirect back after saving
                 }) { Text("Save") }
@@ -209,7 +215,7 @@ fun SettingsScreen(
                 actions = {
                     if (pageState == SettingsPage.MAIN) {
                          TextButton(onClick = {
-                             onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen)
+                             onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
                          }) {
                              Text("Save")
                          }
@@ -231,15 +237,8 @@ fun SettingsScreen(
             )
         }
     ) { paddingValues ->
-        AnimatedContent(
+        Crossfade(
             targetState = pageState,
-            transitionSpec = {
-                if (targetState == SettingsPage.APP_SELECTION) {
-                    slideInHorizontally { it } togetherWith slideOutHorizontally { -it }
-                } else {
-                    slideInHorizontally { -it } togetherWith slideOutHorizontally { it }
-                }
-            },
             label = "SettingsNavigation",
             modifier = Modifier.padding(paddingValues)
         ) { targetPage ->
@@ -251,7 +250,7 @@ fun SettingsScreen(
                     verticalArrangement = Arrangement.Top
                 ) {
                     // Section: Target App
-                    item {
+                    item(key = "header_target_app") {
                         Text(
                             text = "Target App",
                             style = MaterialTheme.typography.labelLarge,
@@ -260,7 +259,7 @@ fun SettingsScreen(
                         )
                     }
 
-                    item {
+                    item(key = "selector_app") {
                         val currentApp = apps.find { 
                             val id = "${it.packageName}/${it.activityName}"
                             id == selectedComponent || it.packageName == selectedComponent
@@ -313,12 +312,12 @@ fun SettingsScreen(
                         )
                     }
 
-                    item {
+                    item(key = "divider_1") {
                          Divider(modifier = Modifier.padding(vertical = 16.dp))
                     }
 
                     // Section: General
-                    item {
+                    item(key = "header_general") {
                         Text(
                             text = "General",
                             style = MaterialTheme.typography.labelLarge,
@@ -327,25 +326,36 @@ fun SettingsScreen(
                         )
                     }
 
-                    item {
-                        // Path Input with Text Button
+                    item(key = "input_path") {
+                        // Path Input
                         Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                             OutlinedTextField(
                                 value = path,
                                 onValueChange = { path = it },
-                                label = { Text("Default Path") },
+                                label = { 
+                                    Text(
+                                        "Default Path",
+                                        modifier = Modifier.padding(horizontal = 4.dp).background(MaterialTheme.colorScheme.background)
+                                    ) 
+                                },
                                 modifier = Modifier.fillMaxWidth(),
                                 trailingIcon = {
                                     TextButton(onClick = { path = currentBrowserPath }) {
                                         Text("Use Current")
                                     }
                                 },
-                                singleLine = true
+                                singleLine = true,
+                                shape = RoundedCornerShape(12.dp),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = Color.Transparent,
+                                    unfocusedContainerColor = Color.Transparent,
+                                    disabledContainerColor = Color.Transparent,
+                                )
                             )
                         }
                     }
 
-                    item {
+                    item(key = "switch_keep_selection") {
                         ListItem(
                             headlineContent = { Text("Keep Selection") },
                             supportingContent = { Text("Maintain selection across folders") },
@@ -365,8 +375,8 @@ fun SettingsScreen(
                         )
                     }
 
-                    item {
-                         ListItem(
+                    item(key = "switch_thumbnails") {
+                        ListItem(
                             headlineContent = { Text("Thumbnails") },
                             supportingContent = { Text("Show image previews") },
                             trailingContent = {
@@ -379,10 +389,10 @@ fun SettingsScreen(
                         )
                     }
 
-                    item {
+                    item(key = "switch_check_storage") {
                         ListItem(
                             headlineContent = { Text("Check Free Space") },
-                            supportingContent = { Text("Useful for apps which might copy shared files to internal memory.") },
+                            supportingContent = { Text("Useful for apps which might copy shared files to internal memory") },
                             trailingContent = {
                                 Switch(
                                     checked = checkLowStorage,
@@ -393,7 +403,7 @@ fun SettingsScreen(
                         )
                     }
 
-                    item {
+                    item(key = "switch_quick_open") {
                         ListItem(
                             headlineContent = { Text("Quick Open") },
                             supportingContent = { Text("Long press to open file") },
@@ -407,7 +417,30 @@ fun SettingsScreen(
                         )
                     }
 
-                    item {
+                    item(key = "divider_2") {
+                        Divider(modifier = Modifier.padding(vertical = 16.dp))
+                    }
+
+                    // Section: Filter
+                    item(key = "header_filters") {
+                        Text(
+                            text = "File Visibility",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                        )
+                    }
+                    
+                    item(key = "filter_selector") {
+                        com.example.gphotosshare.ui.components.FilterModeSelector(
+                           selectedMode = filterMode,
+                           customExtensions = customExtensions,
+                           onModeSelected = { filterMode = it },
+                           onCustomExtensionsChanged = { customExtensions = it }
+                        )
+                    }
+
+                    item(key = "footer_reset") {
                         Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
                              Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                  TextButton(
@@ -431,14 +464,13 @@ fun SettingsScreen(
                     }
                 }
             } else {
-                // APP SELECTION PAGE using Shared Component
+                // APP SELECTION PAGE
                 com.example.gphotosshare.ui.components.AppList(
                     apps = apps,
                     searchQuery = searchQuery,
                     selectedPackage = selectedComponent,
                     onAppSelected = { 
                         selectedComponent = it
-                        // Auto-close search?
                         if (isSearchActive) {
                             isSearchActive = false
                             searchQuery = ""
@@ -450,3 +482,4 @@ fun SettingsScreen(
         }
     }
 }
+// End of file

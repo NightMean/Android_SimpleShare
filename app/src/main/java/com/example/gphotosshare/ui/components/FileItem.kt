@@ -22,6 +22,12 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.InsertDriveFile
 import androidx.compose.material.icons.filled.VideoFile
 import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.AudioFile
+import androidx.compose.material.icons.filled.FolderZip
+import androidx.compose.material.icons.filled.PictureAsPdf
+import androidx.compose.material.icons.filled.Description
+import androidx.compose.material.icons.filled.Android
+import androidx.compose.material.icons.filled.QuestionMark
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Checkbox
@@ -37,19 +43,39 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.indication
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import kotlinx.coroutines.awaitCancellation
 import com.example.gphotosshare.data.FileModel
-
 
 @Composable
 fun FileListItem(
     file: FileModel,
     showThumbnail: Boolean,
+    isPressed: Boolean,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    
+    // Drive Ripple from isPressed state
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+             val press = androidx.compose.foundation.interaction.PressInteraction.Press(androidx.compose.ui.geometry.Offset.Zero)
+             interactionSource.emit(press)
+             try {
+                 awaitCancellation()
+             } finally {
+                 interactionSource.emit(androidx.compose.foundation.interaction.PressInteraction.Release(press))
+             }
+        }
+    }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            // Click handled by parent gestures
+            .indication(interactionSource, androidx.compose.material.ripple.rememberRipple())
             .background(if (file.isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -89,14 +115,30 @@ fun FileListItem(
 fun FileGridItem(
     file: FileModel,
     showThumbnail: Boolean,
+    isPressed: Boolean,
     onClick: () -> Unit
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+
+    // Drive Ripple from isPressed state
+    LaunchedEffect(isPressed) {
+        if (isPressed) {
+             val press = androidx.compose.foundation.interaction.PressInteraction.Press(androidx.compose.ui.geometry.Offset.Zero)
+             interactionSource.emit(press)
+             try {
+                 awaitCancellation()
+             } finally {
+                 interactionSource.emit(androidx.compose.foundation.interaction.PressInteraction.Release(press))
+             }
+        }
+    }
+
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(4.dp)
             .aspectRatio(1f)
-            // Click handled by parent gestures
+            .indication(interactionSource, androidx.compose.material.ripple.rememberRipple())
             .border(
                 width = if (file.isSelected) 3.dp else 0.dp,
                 color = if (file.isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
@@ -162,15 +204,23 @@ fun FileThumbnail(
         }
     } else {
 
-        val isVideo = file.extension in setOf("mp4", "mkv", "webm", "avi")
-        val isImage = file.extension in setOf("jpg", "jpeg", "png", "gif", "heic", "webp")
+        val isVideo = file.extension in setOf("mp4", "mkv", "webm", "avi", "mov", "3gp")
+        val isImage = file.extension in setOf("jpg", "jpeg", "png", "gif", "heic", "webp", "bmp")
+        val isAudio = file.extension in setOf("mp3", "wav", "flac", "ogg", "m4a", "aac", "wma")
+        val isArchive = file.extension in setOf("zip", "rar", "7z", "tar", "gz", "bz2")
+        val isPdf = file.extension == "pdf"
+        val isDoc = file.extension in setOf("doc", "docx", "txt", "rtf", "odt", "xls", "xlsx", "ppt", "pptx")
+        val isApp = file.extension in setOf("apk", "apkm", "xapk")
         
-        val iconVector = if (isVideo) {
-            Icons.Default.VideoFile 
-        } else if (isImage) {
-            Icons.Default.Image
-        } else {
-            Icons.Default.InsertDriveFile
+        val iconVector = when {
+            isVideo -> Icons.Default.VideoFile
+            isImage -> Icons.Default.Image
+            isAudio -> Icons.Default.AudioFile
+            isArchive -> Icons.Default.FolderZip
+            isPdf -> Icons.Default.PictureAsPdf
+            isDoc -> Icons.Default.Description
+            isApp -> Icons.Default.Android
+            else -> Icons.Default.InsertDriveFile // Fallback
         }
 
         // We use a Box to layer the GlideImage OVER the default Icon.
@@ -181,15 +231,36 @@ fun FileThumbnail(
             contentAlignment = Alignment.Center
         ) {
             // 1. The Base Icon (Always visible underneath, acts as placeholder/fallback)
-            Icon(
-                imageVector = iconVector,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.fillMaxSize(0.5f)
-            )
+            // If unknown (fallback), we might want a "Question Mark" indicator overlay or just the file icon.
+            // Requirement: "Any other file should have an icon with a file and a question mark next to it."
+            // We can compose this.
+            
+            if (!isVideo && !isImage && !isAudio && !isArchive && !isPdf && !isDoc && !isApp) {
+                 Box(contentAlignment = Alignment.BottomEnd) {
+                     Icon(
+                        imageVector = Icons.Default.InsertDriveFile,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.fillMaxSize(0.5f).align(Alignment.Center)
+                    )
+                     Icon(
+                        imageVector = Icons.Default.QuestionMark,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.size(12.dp).align(Alignment.Center) // Overlay center or make it a composite
+                    )
+                 }
+            } else {
+                Icon(
+                    imageVector = iconVector,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.fillMaxSize(0.5f)
+                )
+            }
 
-            // 2. The Image (Only if enabled)
-            if (showThumbnail) {
+            // 2. The Image (Only if enabled and is visual media)
+            if (showThumbnail && (isImage || isVideo)) {
                 com.bumptech.glide.integration.compose.GlideImage(
                     model = file.file,
                     contentDescription = "Thumbnail",

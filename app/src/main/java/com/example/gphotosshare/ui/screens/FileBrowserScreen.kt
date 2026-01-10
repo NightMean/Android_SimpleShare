@@ -127,6 +127,7 @@ fun FileBrowserScreen(
     showThumbnails: Boolean,
     checkLowStorage: Boolean,
     quickOpen: Boolean,
+    allowedExtensions: Set<String>, // New filter parameter
     onSettingsClick: () -> Unit
 ) {
     var rawFiles by remember { mutableStateOf(emptyList<FileModel>()) }
@@ -171,14 +172,14 @@ fun FileBrowserScreen(
     }
 
     // Load files
-    LaunchedEffect(currentPath) {
+    LaunchedEffect(currentPath, allowedExtensions) {
         withContext(Dispatchers.IO) {
-            rawFiles = repository.listFiles(currentPath)
+            rawFiles = repository.listFiles(currentPath, allowedExtensions)
         }
     }
     
     fun refreshFiles() {
-        rawFiles = repository.listFiles(currentPath)
+        rawFiles = repository.listFiles(currentPath, allowedExtensions) // Pass extensions
     }
 
     // Filter and Sort Logic
@@ -238,8 +239,13 @@ fun FileBrowserScreen(
             val index = selectedFiles.indexOfFirst { it.path == file.path }
             if (index != -1) {
                 selectedFiles.removeAt(index)
+                // Safety: Ensure no other copies exist
+                selectedFiles.removeAll { it.path == file.path }
             } else {
-                selectedFiles.add(file)
+                // Ensure not already added (redundant but safe)
+                if (selectedFiles.none { it.path == file.path }) {
+                    selectedFiles.add(file)
+                }
             }
         }
     }
@@ -589,16 +595,37 @@ fun FileBrowserScreen(
 
                 var hasDragged by remember { mutableStateOf(false) }
                 var dragStartPosition by remember { mutableStateOf<Offset?>(null) }
+                var lastDragEndTime by remember { mutableStateOf(0L) } // Debounce for click after drag
+                var pressedItemIndex by remember { mutableStateOf(-1) }
                 val viewConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
+
+                fun handleFileClickWithDebounce(file: FileModel) {
+                     // If a drag/long-press is active OR just finished, ignore this click
+                     // Lowered debounce to 50ms to ensure manual taps are registered
+                     if (!isDragSelecting && System.currentTimeMillis() - lastDragEndTime > 50) {
+                         handleFileClick(file)
+                     }
+                }
 
                 Box(
                     modifier = Modifier.fillMaxSize()
                         .pointerInput(isGridView) {
                             detectTapGestures(
+                                onPress = { offset ->
+                                    val index = getItemIndexFromOffset(offset)
+                                    if (index != null && index >= 0 && index < displayedFiles.size) {
+                                        pressedItemIndex = index
+                                        try {
+                                            tryAwaitRelease()
+                                        } finally {
+                                            pressedItemIndex = -1
+                                        }
+                                    }
+                                },
                                 onTap = { offset ->
                                     val index = getItemIndexFromOffset(offset)
                                     if (index != null && index >= 0 && index < displayedFiles.size) {
-                                        handleFileClick(displayedFiles[index])
+                                        handleFileClickWithDebounce(displayedFiles[index])
                                     }
                                 }
                             )
@@ -608,20 +635,26 @@ fun FileBrowserScreen(
                                 onDragStart = { offset ->
                                     val index = getItemIndexFromOffset(offset)
                                     if (index != null && index >= 0 && index < displayedFiles.size) {
-                                        isDragSelecting = true
-                                        hasDragged = false // Reset
-                                        dragStartPosition = offset
+                                        val item = displayedFiles[index]
                                         
-                                        // Capture initial state
-                                        val initialSet = selectedFiles.map { it.path }.toSet()
-                                        dragStartInfo = index to initialSet
-                                        currentDragIndex = index
-                                        lastDragPosition = offset
-                                        
-                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        // Disable long-press/drag on folders
+                                        if (!item.isDirectory) {
+                                            isDragSelecting = true
+                                            hasDragged = false // Reset
+                                            dragStartPosition = offset
+                                            
+                                            // Capture initial state
+                                            val initialSet = selectedFiles.map { it.path }.toSet()
+                                            dragStartInfo = index to initialSet
+                                            currentDragIndex = index
+                                            lastDragPosition = offset
+                                            
+                                            hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        }
                                     }
                                 },
                                 onDragEnd = { 
+                                    lastDragEndTime = System.currentTimeMillis()
                                     // If we haven't moved significantly, treat as just a Long Press Release (Quick Open)
                                     if (quickOpen && !hasDragged && dragStartInfo != null) {
                                         val startIndex = dragStartInfo!!.first
@@ -638,6 +671,7 @@ fun FileBrowserScreen(
                                     dragStartPosition = null
                                 },
                                 onDragCancel = { 
+                                    lastDragEndTime = System.currentTimeMillis()
                                     isDragSelecting = false 
                                     dragStartInfo = null
                                     currentDragIndex = null
@@ -673,6 +707,7 @@ fun FileBrowserScreen(
                     if (isGridView) {
                         LazyVerticalGrid(
                             state = gridState,
+                            userScrollEnabled = !isDragSelecting, // Prevent scroll interference during drag
                             columns = GridCells.Adaptive(minSize = 100.dp),
                             contentPadding = PaddingValues(8.dp),
                             modifier = Modifier.fillMaxSize()
@@ -686,13 +721,15 @@ fun FileBrowserScreen(
                                 FileGridItem(
                                     file = file.copy(isSelected = isSelected),
                                     showThumbnail = showThumbnails,
-                                    onClick = { handleFileClick(file) }
+                                    isPressed = (index == pressedItemIndex),
+                                    onClick = { handleFileClickWithDebounce(file) }
                                 )
                             }
                         }
                     } else {
                         LazyColumn(
                             state = listState,
+                            userScrollEnabled = !isDragSelecting, // Prevent scroll interference during drag
                             contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp, start = 8.dp, end = 24.dp),
                             modifier = Modifier.fillMaxSize()
                         ) {
@@ -705,7 +742,8 @@ fun FileBrowserScreen(
                                 FileListItem(
                                     file = file.copy(isSelected = isSelected),
                                     showThumbnail = showThumbnails,
-                                    onClick = { handleFileClick(file) }
+                                    isPressed = (index == pressedItemIndex),
+                                    onClick = { handleFileClickWithDebounce(file) }
                                 )
                             }
                         }

@@ -5,11 +5,7 @@ import java.util.Locale
 
 class FileRepository {
 
-    private val supportedExtensions = setOf(
-        "jpg", "png", "gif", "mp4", "mkv", "webm", "avi", "heic"
-    )
-
-    fun listFiles(path: String): List<FileModel> {
+    fun listFiles(path: String, allowedExtensions: Set<String>): List<FileModel> {
         val root = File(path)
         if (!root.exists() || !root.isDirectory) return emptyList()
 
@@ -17,8 +13,11 @@ class FileRepository {
             val isDirectory = file.isDirectory
             val extension = file.extension.lowercase(Locale.getDefault())
             
-            // Allow directories or supported media files
-            if (isDirectory || supportedExtensions.contains(extension)) {
+            // Allow directories OR if the file extension is in the allowed set
+            // If the set is empty, we might default to nothing or everything? 
+            // Design decision: If set is empty, show nothing (except folders). 
+            // Wrapper will ensure set is populated.
+            if (isDirectory || allowedExtensions.contains(extension)) {
                 FileModel(
                     file = file,
                     name = file.name,

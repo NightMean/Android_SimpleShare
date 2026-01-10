@@ -50,6 +50,8 @@ class MainActivity : ComponentActivity() {
     private val KEY_SHOW_THUMBNAILS = "show_thumbnails"
     private val KEY_CHECK_LOW_STORAGE = "check_low_storage"
     private val KEY_QUICK_OPEN = "quick_open"
+    private val KEY_FILTER_MODE = "filter_mode"
+    private val KEY_CUSTOM_EXTENSIONS = "custom_extensions"
 
     private lateinit var prefs: SharedPreferences
 
@@ -87,8 +89,10 @@ class MainActivity : ComponentActivity() {
         val savedDefaultPath = prefs.getString(KEY_DEFAULT_PATH, FileRepository().getDefaultPath()) ?: FileRepository().getDefaultPath()
         val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
-        val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) // Default false, as per request
-        val savedQuickOpen = prefs.getBoolean(KEY_QUICK_OPEN, false) // Default false
+        val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) 
+        val savedQuickOpen = prefs.getBoolean(KEY_QUICK_OPEN, false) 
+        val savedFilterMode = prefs.getString(KEY_FILTER_MODE, "PRESET_MEDIA") ?: "PRESET_MEDIA"
+        val savedCustomExtensions = prefs.getString(KEY_CUSTOM_EXTENSIONS, "") ?: ""
 
         // We initialize currentPath with savedDefaultPath
         var currentPath by remember { mutableStateOf(savedDefaultPath) }
@@ -96,6 +100,21 @@ class MainActivity : ComponentActivity() {
         var showThumbnails by remember { mutableStateOf(savedShowThumbnails) }
         var checkLowStorage by remember { mutableStateOf(savedCheckLowStorage) }
         var quickOpen by remember { mutableStateOf(savedQuickOpen) }
+        var filterMode by remember { mutableStateOf(savedFilterMode) }
+        var customExtensions by remember { mutableStateOf(savedCustomExtensions) }
+
+        // Compute Allowed Extensions based on Mode
+        val allowedExtensions = remember(filterMode, customExtensions) {
+            if (filterMode == "PRESET_MEDIA") {
+                setOf("jpg", "jpeg", "png", "gif", "mp4", "mkv", "webm", "avi", "heic", "webp") // Media Preset
+            } else {
+                // Custom Parsing
+                customExtensions.split(",")
+                    .map { it.trim().lowercase().removePrefix(".") }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+            }
+        }
         
         // Hoisted selection state
         val selectedFiles = remember { androidx.compose.runtime.mutableStateListOf<com.example.gphotosshare.data.FileModel>() }
@@ -150,6 +169,7 @@ class MainActivity : ComponentActivity() {
                         showThumbnails = showThumbnails,
                         checkLowStorage = checkLowStorage,
                         quickOpen = quickOpen,
+                        allowedExtensions = allowedExtensions,
                         onSettingsClick = { currentScreen = com.example.gphotosshare.ui.Screen.SETTINGS }
                     )
                 } else {
@@ -166,10 +186,12 @@ class MainActivity : ComponentActivity() {
                     currentShowThumbnails = showThumbnails,
                     currentCheckLowStorage = checkLowStorage,
                     currentQuickOpen = quickOpen,
+                    currentFilterMode = filterMode,
+                    currentCustomExtensions = customExtensions,
                     selectedFileCount = selectedFiles.size,
                     onBack = { currentScreen = com.example.gphotosshare.ui.Screen.BROWSER },
 
-                    onSave = { path, targetApp, keepSel, showIcons, checkSpace, qOpen ->
+                    onSave = { path, targetApp, keepSel, showIcons, checkSpace, qOpen, fMode, cExt ->
                         val editor = prefs.edit()
                         editor.putString(KEY_DEFAULT_PATH, path)
                         if (targetApp != null) {
@@ -194,6 +216,12 @@ class MainActivity : ComponentActivity() {
                         
                         editor.putBoolean(KEY_QUICK_OPEN, qOpen)
                         quickOpen = qOpen
+                        
+                        editor.putString(KEY_FILTER_MODE, fMode)
+                        filterMode = fMode
+                        
+                        editor.putString(KEY_CUSTOM_EXTENSIONS, cExt)
+                        customExtensions = cExt
 
                         editor.apply()
                         
@@ -209,6 +237,8 @@ class MainActivity : ComponentActivity() {
                         showThumbnails = true // Default
                         checkLowStorage = false // Default
                         quickOpen = false // Default
+                        filterMode = "PRESET_MEDIA"
+                        customExtensions = ""
                         
                         selectedFiles.clear()
                         
