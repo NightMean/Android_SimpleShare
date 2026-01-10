@@ -265,8 +265,17 @@ fun SettingsScreen(
                         }
                         
                         ListItem(
-                            headlineContent = { Text(currentApp?.name ?: "Select App") },
-                            supportingContent = { Text(currentApp?.packageName ?: "No app selected", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            headlineContent = { 
+                                val displayText = if (currentApp != null) currentApp.name 
+                                                  else if (selectedComponent != null) "Loading..."
+                                                  else "Select App"
+                                Text(displayText)
+                            },
+                            supportingContent = { 
+                                val displayPkg = if (currentApp != null) currentApp.packageName 
+                                                 else selectedComponent ?: "No app selected"
+                                Text(displayPkg, maxLines = 1, overflow = TextOverflow.Ellipsis) 
+                            },
                             leadingContent = {
                                 if (currentApp != null) {
                                     Image(
@@ -275,7 +284,18 @@ fun SettingsScreen(
                                         modifier = Modifier.size(40.dp)
                                     )
                                 } else {
-                                    Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(40.dp))
+                                    // Make placeholder less jarring
+                                    Box(
+                                        modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                         if (selectedComponent == null) {
+                                             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                         } else {
+                                             // Loading indicator or simple Generic App Icon
+                                             Icon(Icons.Default.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) 
+                                         }
+                                    }
                                 }
                             },
                             trailingContent = {

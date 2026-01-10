@@ -205,10 +205,12 @@ class MainActivity : ComponentActivity() {
                         editor.apply()
                         
                         targetAppPackage = null
-                        keepSelection = false
-                        showThumbnails = true
-                        checkLowStorage = false
-                        // quickOpen = false // Optional default
+                        keepSelection = false // Default
+                        showThumbnails = true // Default
+                        checkLowStorage = false // Default
+                        quickOpen = false // Default
+                        
+                        selectedFiles.clear()
                         
                         // Force back to SETUP because targetApp is null
                         currentScreen = com.example.gphotosshare.ui.Screen.SETUP
