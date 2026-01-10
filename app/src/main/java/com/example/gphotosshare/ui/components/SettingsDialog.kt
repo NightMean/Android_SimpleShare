@@ -5,6 +5,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import com.example.gphotosshare.BuildConfig
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -187,7 +189,7 @@ fun SettingsDialog(
                 
                 LazyColumn(
                     modifier = Modifier
-                        .height(300.dp)
+                        .weight(1f) // Use weight to fill available space instead of fixed height
                         .fillMaxWidth()
                         .border(1.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(4.dp))
                 ) {
@@ -234,7 +236,22 @@ fun SettingsDialog(
                            }
                        }
                        Divider()
+                       Divider()
                    }
+                }
+                
+                Spacer(modifier = Modifier.height(16.dp))
+                
+                // Version Info (Outside LazyColumn to ensure visibility)
+                Box(modifier = Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+                   val versionName = BuildConfig.VERSION_NAME
+                   val isDebug = BuildConfig.DEBUG
+                   val channel = if (isDebug) "Dev" else "Beta"
+                   Text(
+                       text = "Version $versionName ($channel)",
+                       style = MaterialTheme.typography.labelSmall,
+                       color = MaterialTheme.colorScheme.onSurfaceVariant
+                   )
                 }
             }
         },

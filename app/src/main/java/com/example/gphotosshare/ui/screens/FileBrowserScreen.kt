@@ -9,8 +9,17 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.window.Popup
+import androidx.compose.ui.window.PopupPositionProvider
+import androidx.compose.ui.unit.IntRect
+import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -37,6 +46,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.ArrowDownward
 import androidx.compose.material.icons.filled.ArrowUpward
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.List
@@ -61,6 +71,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.material3.TopAppBarDefaults
+
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
@@ -98,6 +109,88 @@ import java.util.Locale
 enum class SortOption {
     NAME, SIZE, DATE, TYPE
 }
+
+
+
+enum class TooltipPosition { Above, Below }
+
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
+@Composable
+fun TooltipIconButton(
+    onClick: () -> Unit,
+    tooltip: String,
+    position: TooltipPosition = TooltipPosition.Below,
+    content: @Composable () -> Unit
+) {
+    var showTooltip by remember { mutableStateOf(false) }
+    val haptic = LocalHapticFeedback.current
+
+    Box(contentAlignment = Alignment.Center) {
+        // Use a Surface/Box that mimics IconButton but with combinedClickable
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .background(Color.Transparent, CircleShape)
+                .combinedClickable(
+                    onClick = onClick,
+                    onLongClick = { 
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        showTooltip = true 
+                    }
+                ),
+            contentAlignment = Alignment.Center
+        ) {
+            content()
+        }
+
+        if (showTooltip) {
+            val popupPositionProvider = remember(position) {
+                object : PopupPositionProvider {
+                    override fun calculatePosition(
+                        anchorBounds: IntRect,
+                        windowSize: IntSize,
+                        layoutDirection: LayoutDirection,
+                        popupContentSize: IntSize
+                    ): IntOffset {
+                        val x = anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
+                        val y = if (position == TooltipPosition.Above) {
+                             anchorBounds.top - popupContentSize.height
+                        } else {
+                             anchorBounds.bottom
+                        }
+                        return IntOffset(x, y)
+                    }
+                }
+            }
+
+            Popup(
+                popupPositionProvider = popupPositionProvider,
+                onDismissRequest = { showTooltip = false }
+            ) {
+                 Box(
+                    modifier = Modifier
+                        .padding(4.dp) // Spacing from anchor
+                        .background(MaterialTheme.colorScheme.inverseSurface, RoundedCornerShape(4.dp))
+                        .padding(8.dp)
+                ) {
+                    Text(
+                        text = tooltip,
+                        color = MaterialTheme.colorScheme.inverseOnSurface,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+             // Auto hide helper
+            LaunchedEffect(showTooltip) {
+                if (showTooltip) {
+                    kotlinx.coroutines.delay(1500)
+                    showTooltip = false
+                }
+            }
+        }
+    }
+}
+
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
@@ -165,7 +258,10 @@ fun FileBrowserScreen(
     }
 
     // Filter and Sort Logic
-    val displayedFiles by remember(rawFiles, searchQuery, sortOption, isSortAscending) {
+    var sortFoldersFirst by remember { mutableStateOf(true) }
+
+    // Filter and Sort Logic
+    val displayedFiles by remember(rawFiles, searchQuery, sortOption, isSortAscending, sortFoldersFirst) {
         derivedStateOf {
             var result = if (searchQuery.isBlank()) {
                 rawFiles
@@ -173,16 +269,21 @@ fun FileBrowserScreen(
                 rawFiles.filter { it.name.contains(searchQuery, ignoreCase = true) }
             }
 
+            // Apply Sort Criterion
             result = when (sortOption) {
                 SortOption.NAME -> if (isSortAscending) result.sortedBy { it.name.lowercase(Locale.getDefault()) } else result.sortedByDescending { it.name.lowercase(Locale.getDefault()) }
                 SortOption.SIZE -> if (isSortAscending) result.sortedBy { it.size } else result.sortedByDescending { it.size }
                 SortOption.DATE -> if (isSortAscending) result.sortedBy { it.file.lastModified() } else result.sortedByDescending { it.file.lastModified() }
                 SortOption.TYPE -> if (isSortAscending) result.sortedBy { it.extension } else result.sortedByDescending { it.extension }
             }
-            // Always keep directories on top? User didn't specify, but typically standard.
-            // Current repository logic puts folders on top. Let's preserve that preference if SortOption is NAME, but others might mix.
-            // If user sorts by Size, they likely want big files on top regardless of folder.
-            // Let's stick to pure sort for now as requested.
+
+            // Apply Folders First Priority
+            if (sortFoldersFirst) {
+                // False < True. So !isDirectory (False for folder) < !isDirectory (True for file)
+                // Folders come first.
+                result = result.sortedBy { !it.isDirectory }
+            }
+
             result
         }
     }
@@ -291,13 +392,13 @@ fun FileBrowserScreen(
                             Icon(Icons.Default.ArrowBack, contentDescription = "Close Search")
                         }
                     } else if (File(currentPath).absolutePath != File(repository.getDefaultPath()).absolutePath) {
-                        IconButton(onClick = {
+                        TooltipIconButton(onClick = {
                             val parent = File(currentPath).parent
                             if (parent != null) {
                                 if (!keepSelection) selectedFiles.clear()
                                 onPathChange(parent)
                             }
-                        }) {
+                        }, tooltip = "Go Back") {
                             Icon(Icons.Default.ArrowBack, contentDescription = "Back")
                         }
                     }
@@ -308,7 +409,7 @@ fun FileBrowserScreen(
                             Icon(Icons.Default.Close, contentDescription = "Clear")
                         }
                     } else {
-                        IconButton(onClick = onSettingsClick) {
+                        TooltipIconButton(onClick = onSettingsClick, tooltip = "Settings") {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }
                     }
@@ -323,50 +424,66 @@ fun FileBrowserScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     // Search
-                    IconButton(onClick = { isSearchActive = true }) {
+                    TooltipIconButton(onClick = { isSearchActive = true }, tooltip = "Search", position = TooltipPosition.Above) {
                         Icon(Icons.Default.Search, contentDescription = "Search")
                     }
-                    
+
                     // View Toggle
-                    IconButton(onClick = { isGridView = !isGridView }) {
-                        Icon(
-                            imageVector = if (isGridView) Icons.Default.List else Icons.Default.GridView,
-                            contentDescription = "Toggle View"
-                        )
+                    TooltipIconButton(onClick = { isGridView = !isGridView }, tooltip = "Switch View", position = TooltipPosition.Above) {
+                        Icon(if (isGridView) Icons.Default.List else Icons.Default.GridView, contentDescription = "View Toggle")
                     }
 
                     // Select All
-                    IconButton(onClick = {
-                        if (displayedFiles.all { it.path in selectedPaths }) {
-                             selectedFiles.removeAll { file -> displayedFiles.any { it.path == file.path && !it.isDirectory } }
-                        } else {
-                             // Only select files, often we don't select folders for sharing
-                             val filesToSelect = displayedFiles.filter { !it.isDirectory }
-                             // Add only distinct
-                             filesToSelect.forEach { 
-                                 if (selectedFiles.none { sel -> sel.path == it.path }) {
-                                     selectedFiles.add(it)
-                                 }
+                    TooltipIconButton(onClick = { 
+                        if (displayedFiles.isNotEmpty()) {
+                             val allFiles = displayedFiles.filter { !it.isDirectory }
+                             val allSelected = allFiles.all { file -> selectedFiles.any { it.path == file.path } }
+                             
+                             if (allSelected) {
+                                  selectedFiles.removeAll { file -> displayedFiles.any { it.path == file.path && !it.isDirectory } }
+                             } else {
+                                  // Only select files, often we don't select folders for sharing
+                                  val filesToSelect = displayedFiles.filter { !it.isDirectory }
+                                  // Add only distinct
+                                  filesToSelect.forEach { 
+                                      if (selectedFiles.none { sel -> sel.path == it.path }) {
+                                          selectedFiles.add(it)
+                                      }
+                                  }
                              }
                         }
-                    }) {
+                    }, tooltip = "Select All", position = TooltipPosition.Above) {
                         Icon(Icons.Default.SelectAll, contentDescription = "Select All")
                     }
                     
                     // Refresh
-                    IconButton(onClick = { refreshFiles() }) {
+                    TooltipIconButton(onClick = { refreshFiles() }, tooltip = "Refresh", position = TooltipPosition.Above) {
                         Icon(Icons.Default.Refresh, contentDescription = "Refresh")
                     }
 
                     // Sort
                     Box {
-                        IconButton(onClick = { showSortMenu = true }) {
+                        TooltipIconButton(onClick = { showSortMenu = true }, tooltip = "Sort", position = TooltipPosition.Above) {
                             Icon(Icons.Default.Sort, contentDescription = "Sort")
                         }
                         DropdownMenu(
                             expanded = showSortMenu,
                             onDismissRequest = { showSortMenu = false }
                         ) {
+                            DropdownMenuItem(
+                                text = { Text("Folders first") },
+                                onClick = {
+                                    sortFoldersFirst = !sortFoldersFirst
+                                    showSortMenu = false
+                                },
+                                trailingIcon = {
+                                    if (sortFoldersFirst) {
+                                        Icon(Icons.Default.Check, contentDescription = null)
+                                    }
+                                }
+                            )
+                            androidx.compose.material3.Divider()
+                            
                             SortOption.values().forEach { option ->
                                 DropdownMenuItem(
                                     text = { 
@@ -508,8 +625,10 @@ fun FileBrowserScreen(
                              val fraction = (viewportHeight.toFloat() / estimatedTotalContentHeight).coerceIn(0f, 1f)
                              val offsetFraction = firstOffset.toFloat() / itemSize.toFloat()
                              val effectiveIndex = firstIndex + offsetFraction
-                             val maxIndex = (totalItems - visibleItemsCount).coerceAtLeast(1)
-                             val progress = (effectiveIndex / maxIndex.toFloat()).coerceIn(0f, 1f)
+                             
+                             // Fix jitter: Use totalItems as denominator. 
+                             // Using (totalItems - visibleItems) causes jumps when visible items count changes due to variable item sizes.
+                             val progress = (effectiveIndex / totalItems.toFloat()).coerceIn(0f, 1f)
                              progress to fraction
                         }
                     }
