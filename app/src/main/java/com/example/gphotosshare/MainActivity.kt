@@ -177,6 +177,10 @@ class MainActivity : ComponentActivity() {
                         editor.putBoolean(KEY_KEEP_SELECTION, keepSel)
                         keepSelection = keepSel
                         
+                        if (!keepSel) {
+                            selectedFiles.clear()
+                        }
+                        
                         editor.putBoolean(KEY_SHOW_THUMBNAILS, showIcons)
                         showThumbnails = showIcons
                         

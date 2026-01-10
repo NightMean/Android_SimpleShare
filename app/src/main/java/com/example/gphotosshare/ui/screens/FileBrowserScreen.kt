@@ -16,7 +16,12 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.geometry.Offset
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -467,43 +472,185 @@ fun FileBrowserScreen(
                     Text(if (isSearchActive) "No results found" else "No files found", style = MaterialTheme.typography.bodyLarge)
                 }
             } else {
-                if (isGridView) {
-                    LazyVerticalGrid(
-                        state = gridState,
-                        columns = GridCells.Adaptive(minSize = 100.dp),
-                        contentPadding = PaddingValues(8.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                        items(
-                            count = displayedFiles.size,
-                            key = { index -> displayedFiles[index].path }
-                        ) { index ->
-                            val file = displayedFiles[index]
-                            val isSelected = file.path in selectedPaths
-                            FileGridItem(
-                                file = file.copy(isSelected = isSelected),
-                                showThumbnail = showThumbnails,
-                                onClick = { handleFileClick(file) }
-                            )
+                // Drag Selection Logic
+                var isDragSelecting by remember { mutableStateOf(false) }
+                var dragStartInfo by remember { mutableStateOf<Pair<Int, Set<String>>?>(null) } // Start Index + Initial Selection
+                var currentDragIndex by remember { mutableStateOf<Int?>(null) }
+                var lastDragPosition by remember { mutableStateOf<Offset?>(null) }
+
+                val hapticFeedback = LocalHapticFeedback.current
+                val density = LocalDensity.current
+
+                // Helper to get index from offset
+                fun getItemIndexFromOffset(offset: Offset): Int? {
+                    return if (isGridView) {
+                        gridState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                            val x = item.offset.x
+                            val y = item.offset.y
+                            // Grid items can be complex, but simple bounds check usually suffices
+                            offset.x >= x && offset.x <= x + item.size.width &&
+                            offset.y >= y && offset.y <= y + item.size.height
+                        }?.index
+                    } else {
+                        listState.layoutInfo.visibleItemsInfo.firstOrNull { item ->
+                            val y = item.offset
+                            // List items span full width usually
+                            offset.y >= y && offset.y <= y + item.size
+                        }?.index
+                    }
+                }
+
+                // Auto Scroll Logic
+                LaunchedEffect(isDragSelecting, lastDragPosition) {
+                    if (isDragSelecting && lastDragPosition != null) {
+                        val viewportHeight = if (isGridView) gridState.layoutInfo.viewportSize.height else listState.layoutInfo.viewportSize.height
+                        val topHotZone = with(density) { 60.dp.toPx() }
+                        val bottomHotZone = viewportHeight - topHotZone
+                        
+                        val y = lastDragPosition!!.y
+                        
+                        if (y < topHotZone) {
+                             while (isDragSelecting && lastDragPosition!!.y < topHotZone) {
+                                 val speed = (topHotZone - lastDragPosition!!.y) * 0.5f // rudimentary speed
+                                 if (isGridView) gridState.scrollBy(-speed) else listState.scrollBy(-speed)
+                                 // Update selection during scroll
+                                 currentDragIndex = getItemIndexFromOffset(lastDragPosition!!) ?: currentDragIndex
+                                 kotlinx.coroutines.delay(16)
+                             }
+                        } else if (y > bottomHotZone) {
+                            while (isDragSelecting && lastDragPosition!!.y > bottomHotZone) {
+                                 val speed = (lastDragPosition!!.y - bottomHotZone) * 0.5f
+                                 if (isGridView) gridState.scrollBy(speed) else listState.scrollBy(speed)
+                                 // Update selection during scroll
+                                 currentDragIndex = getItemIndexFromOffset(lastDragPosition!!) ?: currentDragIndex
+                                 kotlinx.coroutines.delay(16)
+                            }
                         }
                     }
-                } else {
-                    LazyColumn(
-                        state = listState,
-                        contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp, start = 8.dp, end = 24.dp),
-                        modifier = Modifier.fillMaxSize()
-                    ) {
-                         items(
-                            count = displayedFiles.size,
-                            key = { index -> displayedFiles[index].path }
-                         ) { index ->
-                            val file = displayedFiles[index]
-                            val isSelected = file.path in selectedPaths
-                            FileListItem(
-                                file = file.copy(isSelected = isSelected),
-                                showThumbnail = showThumbnails,
-                                onClick = { handleFileClick(file) }
+                }
+                
+                // Update Selection Effect
+                LaunchedEffect(dragStartInfo, currentDragIndex) {
+                    val startInfo = dragStartInfo
+                    val currentIndex = currentDragIndex
+                    if (startInfo != null && currentIndex != null && currentIndex >= 0 && currentIndex < displayedFiles.size) {
+                        val (startIndex, initialSelection) = startInfo
+                        val min = minOf(startIndex, currentIndex)
+                        val max = maxOf(startIndex, currentIndex)
+                        
+                        // New Selection = Initial + Range
+                        val newSelectionPaths = initialSelection.toMutableSet()
+                        for (i in min..max) {
+                            newSelectionPaths.add(displayedFiles[i].path)
+                        }
+                        
+                        // Sync to selectedFiles
+                        // We need to match the logic of adding/removing
+                        // Optimization: Only update if changed significantly? 
+                        // But selectedFiles is a mutable list, we need to clear and re-add or diff?
+                        // Simplest: Rebuild
+                        
+                        val currentSet = selectedFiles.map { it.path }.toSet()
+                        if (currentSet != newSelectionPaths) {
+                             // This is heavy if list is huge, but for reasonable lists it's fine.
+                             // More efficient:
+                             // 1. Remove items not in new
+                             selectedFiles.removeAll { it.path !in newSelectionPaths }
+                             // 2. Add items in new that are missing
+                             newSelectionPaths.forEach { path ->
+                                 if (selectedFiles.none { it.path == path }) {
+                                      displayedFiles.find { it.path == path }?.let { selectedFiles.add(it) }
+                                 }
+                             }
+                        }
+                    }
+                }
+
+                Box(
+                    modifier = Modifier.fillMaxSize()
+                        .pointerInput(isGridView) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { offset ->
+                                    val index = getItemIndexFromOffset(offset)
+                                    if (index != null && index >= 0 && index < displayedFiles.size) {
+                                        isDragSelecting = true
+                                        
+                                        // Capture initial state
+                                        // Important: Google Photos ADDS to selection.
+                                        // If we start on an already selected item, do we deselect? 
+                                        // Usually drag-select implies ADDING.
+                                        // Let's assume Additive.
+                                        
+                                        val initialSet = selectedFiles.map { it.path }.toSet()
+                                        dragStartInfo = index to initialSet
+                                        currentDragIndex = index
+                                        lastDragPosition = offset
+                                        
+                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                    }
+                                },
+                                onDragEnd = { 
+                                    isDragSelecting = false 
+                                    dragStartInfo = null
+                                    currentDragIndex = null
+                                    lastDragPosition = null
+                                },
+                                onDragCancel = { 
+                                    isDragSelecting = false 
+                                    dragStartInfo = null
+                                    currentDragIndex = null
+                                    lastDragPosition = null
+                                },
+                                onDrag = { change, _ ->
+                                    lastDragPosition = change.position
+                                    val index = getItemIndexFromOffset(change.position)
+                                    if (index != null) {
+                                        currentDragIndex = index
+                                    }
+                                    // Don't consume change creates smoother scroll interop sometimes, but here we handle scroll manually
+                                    // change.consume() 
+                                }
                             )
+                        }
+                ) {
+                    if (isGridView) {
+                        LazyVerticalGrid(
+                            state = gridState,
+                            columns = GridCells.Adaptive(minSize = 100.dp),
+                            contentPadding = PaddingValues(8.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                            items(
+                                count = displayedFiles.size,
+                                key = { index -> displayedFiles[index].path }
+                            ) { index ->
+                                val file = displayedFiles[index]
+                                val isSelected = file.path in selectedPaths
+                                FileGridItem(
+                                    file = file.copy(isSelected = isSelected),
+                                    showThumbnail = showThumbnails,
+                                    onClick = { handleFileClick(file) }
+                                )
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            state = listState,
+                            contentPadding = PaddingValues(top = 8.dp, bottom = 8.dp, start = 8.dp, end = 24.dp),
+                            modifier = Modifier.fillMaxSize()
+                        ) {
+                             items(
+                                count = displayedFiles.size,
+                                key = { index -> displayedFiles[index].path }
+                             ) { index ->
+                                val file = displayedFiles[index]
+                                val isSelected = file.path in selectedPaths
+                                FileListItem(
+                                    file = file.copy(isSelected = isSelected),
+                                    showThumbnail = showThumbnails,
+                                    onClick = { handleFileClick(file) }
+                                )
+                            }
                         }
                     }
                 }

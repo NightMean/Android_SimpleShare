@@ -132,6 +132,29 @@ fun SettingsScreen(
             focusRequester.requestFocus()
         }
     }
+    
+    if (showClearSelectionWarning) {
+        AlertDialog(
+            onDismissRequest = { showClearSelectionWarning = false },
+            title = { Text("Disable Keep Selection?") },
+            text = { Text("Disabling this will clear your current selection when you save changes.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        keepSelection = false
+                        showClearSelectionWarning = false
+                    }
+                ) {
+                    Text("Turn Off")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showClearSelectionWarning = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
 
     Scaffold(
         topBar = {
