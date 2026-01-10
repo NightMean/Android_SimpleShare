@@ -36,7 +36,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.example.gphotosshare.data.FileRepository
-import com.example.gphotosshare.ui.components.SettingsDialog
+// import com.example.gphotosshare.ui.components.SettingsDialog (Deleted)
 import com.example.gphotosshare.ui.screens.FileBrowserScreen
 import com.example.gphotosshare.ui.theme.GPhotosShareTheme
 
@@ -71,25 +71,28 @@ class MainActivity : ComponentActivity() {
     @Composable
     fun MainContent() {
         var hasPermission by remember { mutableStateOf(checkStoragePermission()) }
-        var showSettings by remember { mutableStateOf(false) }
+        // State for Screen Navigation
+        val savedTargetApp = prefs.getString(KEY_TARGET_APP, null)
+        var targetAppPackage by remember { mutableStateOf(savedTargetApp) }
+        
+        var currentScreen by remember {
+            mutableStateOf(
+                if (!hasPermission || targetAppPackage == null) com.example.gphotosshare.ui.Screen.SETUP 
+                else com.example.gphotosshare.ui.Screen.BROWSER
+            )
+        }
         
         // Define default path from prefs, but also keep track of current browsing path
         val savedDefaultPath = prefs.getString(KEY_DEFAULT_PATH, FileRepository().getDefaultPath()) ?: FileRepository().getDefaultPath()
-        val savedTargetApp = prefs.getString(KEY_TARGET_APP, null)
         val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
-
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
         val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) // Default false, as per request
 
-        
-        // We initialize currentPath with savedDefaultPath, but it's now state managed here
+        // We initialize currentPath with savedDefaultPath
         var currentPath by remember { mutableStateOf(savedDefaultPath) }
-        var targetAppPackage by remember { mutableStateOf(savedTargetApp) }
         var keepSelection by remember { mutableStateOf(savedKeepSelection) }
-
         var showThumbnails by remember { mutableStateOf(savedShowThumbnails) }
         var checkLowStorage by remember { mutableStateOf(savedCheckLowStorage) }
-
         
         // Hoisted selection state
         val selectedFiles = remember { androidx.compose.runtime.mutableStateListOf<com.example.gphotosshare.data.FileModel>() }
@@ -98,7 +101,6 @@ class MainActivity : ComponentActivity() {
         val context = androidx.compose.ui.platform.LocalContext.current
         LaunchedEffect(showThumbnails) {
             if (!showThumbnails) {
-                // Clear memory cache to free up resources as requested
                 com.bumptech.glide.Glide.get(context).clearMemory()
             }
         }
@@ -108,7 +110,15 @@ class MainActivity : ComponentActivity() {
         androidx.compose.runtime.DisposableEffect(lifecycleOwner) {
             val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
                 if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
-                    hasPermission = checkStoragePermission()
+                    val newPermission = checkStoragePermission()
+                    if (newPermission != hasPermission) {
+                        hasPermission = newPermission
+                        // If we gain permission and we were in SETUP, we should stay in SETUP until App is selected
+                        // If we lose permission, we must go to SETUP
+                        if (!newPermission) {
+                            currentScreen = com.example.gphotosshare.ui.Screen.SETUP
+                        }
+                    }
                 }
             }
             lifecycleOwner.lifecycle.addObserver(observer)
@@ -117,69 +127,107 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        if (hasPermission) {
-            val repository = remember { FileRepository() }
-            
-            FileBrowserScreen(
-                repository = repository,
+        if (false) { 
+             // Legacy PermissionScreen block removed, handled by SetupScreen
+        }
 
-                currentPath = currentPath,
-                onPathChange = { newPath -> currentPath = newPath },
-                selectedFiles = selectedFiles,
-                targetAppPackageName = targetAppPackage,
-                keepSelection = keepSelection,
-                showThumbnails = showThumbnails,
-                checkLowStorage = checkLowStorage,
-                onSettingsClick = { showSettings = true }
-            )
-            
-            if (showSettings) {
-                SettingsDialog(
+        val repository = remember { FileRepository() }
+        
+        // NAVIGATION HOST
+        when (currentScreen) {
+            com.example.gphotosshare.ui.Screen.BROWSER -> {
+                if (hasPermission) {
+                    FileBrowserScreen(
+                        repository = repository,
+                        currentPath = currentPath,
+                        onPathChange = { newPath -> currentPath = newPath },
+                        selectedFiles = selectedFiles,
+                        targetAppPackageName = targetAppPackage,
+                        keepSelection = keepSelection,
+                        showThumbnails = showThumbnails,
+                        checkLowStorage = checkLowStorage,
+                        onSettingsClick = { currentScreen = com.example.gphotosshare.ui.Screen.SETTINGS }
+                    )
+                } else {
+                    // Fallback if permission lost
+                    currentScreen = com.example.gphotosshare.ui.Screen.SETUP
+                }
+            }
+            com.example.gphotosshare.ui.Screen.SETTINGS -> {
+                com.example.gphotosshare.ui.screens.SettingsScreen(
                     currentDefaultPath = savedDefaultPath,
                     currentBrowserPath = currentPath,
-                    currentTargetAppPackage = targetAppPackage,
+                    currentTargetAppPackage = targetAppPackage, // Can be null now
                     currentKeepSelection = keepSelection,
                     currentShowThumbnails = showThumbnails,
                     currentCheckLowStorage = checkLowStorage,
                     selectedFileCount = selectedFiles.size,
-                    onDismiss = { showSettings = false },
+                    onBack = { currentScreen = com.example.gphotosshare.ui.Screen.BROWSER },
                     onClearSelection = { selectedFiles.clear() },
-                    onSave = { newPath, newAppPackage, newKeepSelection, newShowThumbnails, newCheckLowStorage ->
+                    onSave = { path, targetApp, keepSel, showIcons, checkSpace ->
                         val editor = prefs.edit()
-                        editor.putString(KEY_DEFAULT_PATH, newPath)
-                        if (newAppPackage != null) {
-                            editor.putString(KEY_TARGET_APP, newAppPackage)
-                            targetAppPackage = newAppPackage
+                        editor.putString(KEY_DEFAULT_PATH, path)
+                        if (targetApp != null) {
+                            editor.putString(KEY_TARGET_APP, targetApp)
+                            targetAppPackage = targetApp
                         } else {
                             editor.remove(KEY_TARGET_APP)
                             targetAppPackage = null
                         }
-                        editor.putBoolean(KEY_KEEP_SELECTION, newKeepSelection)
-                        keepSelection = newKeepSelection
+                        editor.putBoolean(KEY_KEEP_SELECTION, keepSel)
+                        keepSelection = keepSel
                         
-                        editor.putBoolean(KEY_SHOW_THUMBNAILS, newShowThumbnails)
-                        showThumbnails = newShowThumbnails
+                        editor.putBoolean(KEY_SHOW_THUMBNAILS, showIcons)
+                        showThumbnails = showIcons
                         
-
-                        
-
-                        
-                        editor.putBoolean(KEY_CHECK_LOW_STORAGE, newCheckLowStorage)
-                        checkLowStorage = newCheckLowStorage
+                        editor.putBoolean(KEY_CHECK_LOW_STORAGE, checkSpace)
+                        checkLowStorage = checkSpace
 
                         editor.apply()
                         
-                        showSettings = false
+                        android.widget.Toast.makeText(context, "Settings saved", android.widget.Toast.LENGTH_SHORT).show()
+                    },
+                    onReset = {
+                        val editor = prefs.edit()
+                        editor.clear()
+                        editor.apply()
+                        
+                        targetAppPackage = null
+                        keepSelection = false
+                        showThumbnails = true
+                        checkLowStorage = false
+                        
+                        // Force back to SETUP because targetApp is null
+                        currentScreen = com.example.gphotosshare.ui.Screen.SETUP
+                        
+                        android.widget.Toast.makeText(context, "Reset to defaults.", android.widget.Toast.LENGTH_SHORT).show()
                     }
                 )
             }
-
-        } else {
-            PermissionScreen(
-                onRequestPermission = {
-                    requestStoragePermission()
-                }
-            )
+            com.example.gphotosshare.ui.Screen.SETUP,
+            com.example.gphotosshare.ui.Screen.SETUP_APP_SELECTION -> {
+                com.example.gphotosshare.ui.screens.SetupScreen(
+                    currentScreen = currentScreen,
+                    permissionGranted = hasPermission,
+                    selectedTargetApp = targetAppPackage,
+                    onRequestPermission = { requestStoragePermission() },
+                    onAppSelected = { app -> 
+                         targetAppPackage = app
+                         val editor = prefs.edit()
+                         editor.putString(KEY_TARGET_APP, app)
+                         editor.apply()
+                    },
+                    onFinish = {
+                        currentScreen = com.example.gphotosshare.ui.Screen.BROWSER
+                    },
+                    onNavigateToAppSelection = {
+                        currentScreen = com.example.gphotosshare.ui.Screen.SETUP_APP_SELECTION
+                    },
+                    onBackFromAppSelection = {
+                        currentScreen = com.example.gphotosshare.ui.Screen.SETUP
+                    }
+                )
+            }
         }
     }
 

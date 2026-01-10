@@ -5,6 +5,9 @@ import android.content.Intent
 import android.net.Uri
 import android.provider.Settings
 import android.widget.Toast
+import com.example.gphotosshare.ui.components.FastScrollbar
+import com.example.gphotosshare.ui.components.TooltipIconButton
+import com.example.gphotosshare.ui.components.TooltipPosition
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.Image
@@ -13,13 +16,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.window.Popup
-import androidx.compose.ui.window.PopupPositionProvider
-import androidx.compose.ui.unit.IntRect
-import androidx.compose.ui.unit.IntSize
-import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.platform.LocalHapticFeedback
-import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -110,86 +108,6 @@ enum class SortOption {
     NAME, SIZE, DATE, TYPE
 }
 
-
-
-enum class TooltipPosition { Above, Below }
-
-@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
-@Composable
-fun TooltipIconButton(
-    onClick: () -> Unit,
-    tooltip: String,
-    position: TooltipPosition = TooltipPosition.Below,
-    content: @Composable () -> Unit
-) {
-    var showTooltip by remember { mutableStateOf(false) }
-    val haptic = LocalHapticFeedback.current
-
-    Box(contentAlignment = Alignment.Center) {
-        // Use a Surface/Box that mimics IconButton but with combinedClickable
-        Box(
-            modifier = Modifier
-                .size(48.dp)
-                .background(Color.Transparent, CircleShape)
-                .combinedClickable(
-                    onClick = onClick,
-                    onLongClick = { 
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
-                        showTooltip = true 
-                    }
-                ),
-            contentAlignment = Alignment.Center
-        ) {
-            content()
-        }
-
-        if (showTooltip) {
-            val popupPositionProvider = remember(position) {
-                object : PopupPositionProvider {
-                    override fun calculatePosition(
-                        anchorBounds: IntRect,
-                        windowSize: IntSize,
-                        layoutDirection: LayoutDirection,
-                        popupContentSize: IntSize
-                    ): IntOffset {
-                        val x = anchorBounds.left + (anchorBounds.width - popupContentSize.width) / 2
-                        val y = if (position == TooltipPosition.Above) {
-                             anchorBounds.top - popupContentSize.height
-                        } else {
-                             anchorBounds.bottom
-                        }
-                        return IntOffset(x, y)
-                    }
-                }
-            }
-
-            Popup(
-                popupPositionProvider = popupPositionProvider,
-                onDismissRequest = { showTooltip = false }
-            ) {
-                 Box(
-                    modifier = Modifier
-                        .padding(4.dp) // Spacing from anchor
-                        .background(MaterialTheme.colorScheme.inverseSurface, RoundedCornerShape(4.dp))
-                        .padding(8.dp)
-                ) {
-                    Text(
-                        text = tooltip,
-                        color = MaterialTheme.colorScheme.inverseOnSurface,
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                }
-            }
-             // Auto hide helper
-            LaunchedEffect(showTooltip) {
-                if (showTooltip) {
-                    kotlinx.coroutines.delay(1500)
-                    showTooltip = false
-                }
-            }
-        }
-    }
-}
 
 
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
@@ -634,10 +552,13 @@ fun FileBrowserScreen(
                     }
                 }
 
-                FastScroller(
-                    files = displayedFiles,
+                FastScrollbar(
+                    listSize = displayedFiles.size,
                     scrollState = scrollStateValues,
                     modifier = Modifier.padding(top = 16.dp, bottom = 16.dp),
+                    getLabelForIndex = { index -> 
+                        displayedFiles.getOrNull(index)?.name?.firstOrNull()?.uppercaseChar() ?: '#' 
+                    },
                     onScrollTo = { progress ->
                          coroutineScope.launch {
                             val totalItems = if (isGridView) {
@@ -693,138 +614,25 @@ fun FileBrowserScreen(
             }
         )
     }
-}
 
-@Composable
-fun FastScroller(
-    files: List<FileModel>,
-    scrollState: androidx.compose.runtime.State<Pair<Float, Float>>,
-    modifier: Modifier = Modifier,
-    onScrollTo: (Float) -> Unit
-) {
-    if (files.size < 10) return 
-
-    val isDraggingState = remember { mutableStateOf(false) }
-    val currentLetterState = remember { mutableStateOf<Char?>(null) }
-    val currentYState = remember { mutableStateOf(0f) }
-    val listSize = files.size
-
-    BoxWithConstraints(modifier = modifier.fillMaxSize()) {
-        val trackHeight = constraints.maxHeight.toFloat()
-        val minThumbHeight = with(LocalDensity.current) { 48.dp.toPx() }
-        
-        Box(
-            modifier = Modifier
-                .align(Alignment.CenterEnd)
-                .padding(end = 2.dp)
-                .width(32.dp) 
-                .fillMaxHeight()
-                .pointerInput(listSize, trackHeight, scrollState) {
-                    detectVerticalDragGestures(
-                        onDragStart = { offset ->
-                            isDraggingState.value = true
-                            currentYState.value = offset.y.coerceIn(0f, trackHeight)
-                        },
-                        onDragEnd = { isDraggingState.value = false },
-                        onDragCancel = { isDraggingState.value = false },
-                        onVerticalDrag = { change, _ ->
-                            val y = change.position.y.coerceIn(0f, trackHeight)
-                            currentYState.value = y
-                            
-                            val (_, fraction) = scrollState.value
-                            val thumbHeight = (trackHeight * fraction).coerceAtLeast(minThumbHeight)
-                            val travelDistance = trackHeight - thumbHeight
-                            
-                            val rawProgress = (y - thumbHeight / 2) / travelDistance
-                            val progress = rawProgress.coerceIn(0f, 1f)
-                            onScrollTo(progress)
-                            
-                            val index = (progress * (listSize - 1)).toInt()
-                            val file = files.getOrNull(index)
-                            if (file != null) {
-                                currentLetterState.value = file.name.firstOrNull()?.uppercaseChar() ?: '#'
-                            }
-                        }
-                    )
+    if (targetAppPackageName == null) {
+        AlertDialog(
+            onDismissRequest = { }, 
+            title = { Text("Setup Required") },
+            text = { Text("You must select a target app to share files with before using the browser.") },
+            confirmButton = {
+                TextButton(
+                    onClick = { onSettingsClick() }
+                ) {
+                    Text("Select App")
                 }
-        ) {
-              Box(
-                  modifier = Modifier
-                      .align(Alignment.TopCenter)
-                      .width(4.dp)
-                      .layout { measurable, constraints ->
-                          val (progress, fraction) = scrollState.value
-                          val thumbHeightValue = (trackHeight * fraction).coerceAtLeast(minThumbHeight)
-                          
-                          val placeable = measurable.measure(
-                              constraints.copy(
-                                  minHeight = thumbHeightValue.toInt(),
-                                  maxHeight = thumbHeightValue.toInt()
-                              )
-                          )
-                          
-                          val travelDistance = trackHeight - thumbHeightValue
-                          val isDragging = isDraggingState.value
-                          val currentY = currentYState.value
-                          
-                          val visualY = if (isDragging) {
-                              currentY - thumbHeightValue / 2
-                          } else {
-                              progress * travelDistance
-                          }
-                          val effectiveY = visualY.coerceIn(0f, travelDistance)
-                          
-                          layout(placeable.width, placeable.height) {
-                              placeable.place(0, effectiveY.toInt())
-                          }
-                      }
-                      .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(2.dp))
-              )
-        }
-
-        FastScrollBubble(
-            isDraggingState = isDraggingState,
-            currentLetterState = currentLetterState,
-            currentYState = currentYState,
-            trackHeight = trackHeight
+            },
+            properties = androidx.compose.ui.window.DialogProperties(dismissOnBackPress = false, dismissOnClickOutside = false)
         )
     }
 }
 
-@Composable
-fun FastScrollBubble(
-    isDraggingState: androidx.compose.runtime.State<Boolean>,
-    currentLetterState: androidx.compose.runtime.State<Char?>,
-    currentYState: androidx.compose.runtime.State<Float>,
-    trackHeight: Float
-) {
-    val isDragging = isDraggingState.value
-    val currentLetter = currentLetterState.value
-    val currentY = currentYState.value
 
-    if (isDragging && currentLetter != null) {
-        val bubbleSize = 64.dp
-        val bubbleSizePx = with(LocalDensity.current) { bubbleSize.toPx() }
-        val bubbleY = (currentY - bubbleSizePx / 2f).coerceIn(0f, trackHeight - bubbleSizePx) 
-        
-        Box(
-            modifier = Modifier
-                .fillMaxSize() 
-                .wrapContentSize(Alignment.TopEnd) 
-                .offset { IntOffset(0, bubbleY.toInt()) }
-                .padding(end = 48.dp) 
-                .size(bubbleSize)
-                .background(MaterialTheme.colorScheme.primary, CircleShape),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = currentLetter.toString(),
-                style = MaterialTheme.typography.displaySmall,
-                color = MaterialTheme.colorScheme.onPrimary
-            )
-        }
-    }
-}
 
 fun shareFiles(context: android.content.Context, files: List<FileModel>, targetAppPackageName: String?) {
     if (files.isEmpty()) return
