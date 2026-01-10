@@ -62,9 +62,11 @@ fun SettingsScreen(
     val context = androidx.compose.ui.platform.LocalContext.current
     val appRepository = remember { AppRepository(context) }
     var apps by remember { mutableStateOf(emptyList<AppModel>()) }
+    var isLoadingApps by remember { mutableStateOf(true) }
     
     LaunchedEffect(Unit) {
         apps = appRepository.getShareableApps()
+        isLoadingApps = false
     }
     
     // Warning Dialog Trigger
@@ -267,13 +269,15 @@ fun SettingsScreen(
                         ListItem(
                             headlineContent = { 
                                 val displayText = if (currentApp != null) currentApp.name 
-                                                  else if (selectedComponent != null) "Loading..."
+                                                  else if (isLoadingApps && selectedComponent != null) "Loading..."
                                                   else "Select App"
                                 Text(displayText)
                             },
                             supportingContent = { 
                                 val displayPkg = if (currentApp != null) currentApp.packageName 
-                                                 else selectedComponent ?: "No app selected"
+                                                 else if (selectedComponent != null && !isLoadingApps) "App not found ($selectedComponent)"
+                                                 else if (selectedComponent != null) "Loading..."
+                                                 else "No app selected"
                                 Text(displayPkg, maxLines = 1, overflow = TextOverflow.Ellipsis) 
                             },
                             leadingContent = {
@@ -284,16 +288,20 @@ fun SettingsScreen(
                                         modifier = Modifier.size(40.dp)
                                     )
                                 } else {
-                                    // Make placeholder less jarring
+                                    // Placeholder
                                     Box(
                                         modifier = Modifier.size(40.dp).background(MaterialTheme.colorScheme.surfaceVariant, androidx.compose.foundation.shape.CircleShape),
                                         contentAlignment = Alignment.Center
                                     ) {
-                                         if (selectedComponent == null) {
-                                             Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                         if (isLoadingApps && selectedComponent != null) {
+                                              // Loading
+                                              Icon(Icons.Default.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                                         } else if (selectedComponent != null) {
+                                              // Warning / Not Found
+                                              Icon(Icons.Default.Close, contentDescription = "Not Found", tint = MaterialTheme.colorScheme.error)
                                          } else {
-                                             // Loading indicator or simple Generic App Icon
-                                             Icon(Icons.Default.ArrowForward, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant) 
+                                              // Empty / Check
+                                              Icon(Icons.Default.Check, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                                          }
                                     }
                                 }
@@ -388,7 +396,7 @@ fun SettingsScreen(
                     item {
                         ListItem(
                             headlineContent = { Text("Quick Open") },
-                            supportingContent = { Text("Long press to open file (if not dragging)") },
+                            supportingContent = { Text("Long press to open file") },
                             trailingContent = {
                                 Switch(
                                     checked = quickOpen,

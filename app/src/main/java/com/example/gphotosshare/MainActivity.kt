@@ -182,9 +182,9 @@ class MainActivity : ComponentActivity() {
                         editor.putBoolean(KEY_KEEP_SELECTION, keepSel)
                         keepSelection = keepSel
                         
-                        if (!keepSel) {
-                            selectedFiles.clear()
-                        }
+                        // Note: We do NOT clear selectedFiles here. 
+                        // "Keep Selection" controls behavior during navigation, not immediate clearance.
+                        // Clearing happens in FileBrowserScreen when navigating if this is false.
                         
                         editor.putBoolean(KEY_SHOW_THUMBNAILS, showIcons)
                         showThumbnails = showIcons
