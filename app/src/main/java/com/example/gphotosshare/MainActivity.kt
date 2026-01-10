@@ -49,6 +49,7 @@ class MainActivity : ComponentActivity() {
 
     private val KEY_SHOW_THUMBNAILS = "show_thumbnails"
     private val KEY_CHECK_LOW_STORAGE = "check_low_storage"
+    private val KEY_QUICK_OPEN = "quick_open"
 
     private lateinit var prefs: SharedPreferences
 
@@ -87,12 +88,14 @@ class MainActivity : ComponentActivity() {
         val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
         val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) // Default false, as per request
+        val savedQuickOpen = prefs.getBoolean(KEY_QUICK_OPEN, false) // Default false
 
         // We initialize currentPath with savedDefaultPath
         var currentPath by remember { mutableStateOf(savedDefaultPath) }
         var keepSelection by remember { mutableStateOf(savedKeepSelection) }
         var showThumbnails by remember { mutableStateOf(savedShowThumbnails) }
         var checkLowStorage by remember { mutableStateOf(savedCheckLowStorage) }
+        var quickOpen by remember { mutableStateOf(savedQuickOpen) }
         
         // Hoisted selection state
         val selectedFiles = remember { androidx.compose.runtime.mutableStateListOf<com.example.gphotosshare.data.FileModel>() }
@@ -146,6 +149,7 @@ class MainActivity : ComponentActivity() {
                         keepSelection = keepSelection,
                         showThumbnails = showThumbnails,
                         checkLowStorage = checkLowStorage,
+                        quickOpen = quickOpen,
                         onSettingsClick = { currentScreen = com.example.gphotosshare.ui.Screen.SETTINGS }
                     )
                 } else {
@@ -161,10 +165,11 @@ class MainActivity : ComponentActivity() {
                     currentKeepSelection = keepSelection,
                     currentShowThumbnails = showThumbnails,
                     currentCheckLowStorage = checkLowStorage,
+                    currentQuickOpen = quickOpen,
                     selectedFileCount = selectedFiles.size,
                     onBack = { currentScreen = com.example.gphotosshare.ui.Screen.BROWSER },
 
-                    onSave = { path, targetApp, keepSel, showIcons, checkSpace ->
+                    onSave = { path, targetApp, keepSel, showIcons, checkSpace, qOpen ->
                         val editor = prefs.edit()
                         editor.putString(KEY_DEFAULT_PATH, path)
                         if (targetApp != null) {
@@ -186,6 +191,9 @@ class MainActivity : ComponentActivity() {
                         
                         editor.putBoolean(KEY_CHECK_LOW_STORAGE, checkSpace)
                         checkLowStorage = checkSpace
+                        
+                        editor.putBoolean(KEY_QUICK_OPEN, qOpen)
+                        quickOpen = qOpen
 
                         editor.apply()
                         
@@ -200,6 +208,7 @@ class MainActivity : ComponentActivity() {
                         keepSelection = false
                         showThumbnails = true
                         checkLowStorage = false
+                        // quickOpen = false // Optional default
                         
                         // Force back to SETUP because targetApp is null
                         currentScreen = com.example.gphotosshare.ui.Screen.SETUP

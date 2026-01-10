@@ -126,6 +126,7 @@ fun FileBrowserScreen(
     keepSelection: Boolean,
     showThumbnails: Boolean,
     checkLowStorage: Boolean,
+    quickOpen: Boolean,
     onSettingsClick: () -> Unit
 ) {
     var rawFiles by remember { mutableStateOf(emptyList<FileModel>()) }
@@ -255,6 +256,26 @@ fun FileBrowserScreen(
             }
         } else {
             shareFiles(context, selectedFiles, targetAppPackageName)
+        }
+    }
+
+    fun openFile(fileModel: FileModel) {
+        try {
+            val uri = androidx.core.content.FileProvider.getUriForFile(
+                context,
+                "${context.packageName}.provider",
+                fileModel.file
+            )
+            
+            val mimeType = android.webkit.MimeTypeMap.getSingleton().getMimeTypeFromExtension(fileModel.extension.lowercase()) ?: "*/*"
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, mimeType)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            context.startActivity(intent)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Cannot open file: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
 
@@ -566,21 +587,32 @@ fun FileBrowserScreen(
                     }
                 }
 
+                var hasDragged by remember { mutableStateOf(false) }
+                var dragStartPosition by remember { mutableStateOf<Offset?>(null) }
+                val viewConfiguration = androidx.compose.ui.platform.LocalViewConfiguration.current
+
                 Box(
                     modifier = Modifier.fillMaxSize()
                         .pointerInput(isGridView) {
+                            detectTapGestures(
+                                onTap = { offset ->
+                                    val index = getItemIndexFromOffset(offset)
+                                    if (index != null && index >= 0 && index < displayedFiles.size) {
+                                        handleFileClick(displayedFiles[index])
+                                    }
+                                }
+                            )
+                        }
+                        .pointerInput(isGridView, quickOpen) {
                             detectDragGesturesAfterLongPress(
                                 onDragStart = { offset ->
                                     val index = getItemIndexFromOffset(offset)
                                     if (index != null && index >= 0 && index < displayedFiles.size) {
                                         isDragSelecting = true
+                                        hasDragged = false // Reset
+                                        dragStartPosition = offset
                                         
                                         // Capture initial state
-                                        // Important: Google Photos ADDS to selection.
-                                        // If we start on an already selected item, do we deselect? 
-                                        // Usually drag-select implies ADDING.
-                                        // Let's assume Additive.
-                                        
                                         val initialSet = selectedFiles.map { it.path }.toSet()
                                         dragStartInfo = index to initialSet
                                         currentDragIndex = index
@@ -590,25 +622,50 @@ fun FileBrowserScreen(
                                     }
                                 },
                                 onDragEnd = { 
+                                    // If we haven't moved significantly, treat as just a Long Press Release (Quick Open)
+                                    if (quickOpen && !hasDragged && dragStartInfo != null) {
+                                        val startIndex = dragStartInfo!!.first
+                                        if (startIndex >= 0 && startIndex < displayedFiles.size) {
+                                            openFile(displayedFiles[startIndex])
+                                        }
+                                    }
+
                                     isDragSelecting = false 
                                     dragStartInfo = null
                                     currentDragIndex = null
                                     lastDragPosition = null
+                                    hasDragged = false
+                                    dragStartPosition = null
                                 },
                                 onDragCancel = { 
                                     isDragSelecting = false 
                                     dragStartInfo = null
                                     currentDragIndex = null
                                     lastDragPosition = null
+                                    hasDragged = false
+                                    dragStartPosition = null
                                 },
                                 onDrag = { change, _ ->
                                     lastDragPosition = change.position
-                                    val index = getItemIndexFromOffset(change.position)
-                                    if (index != null) {
-                                        currentDragIndex = index
+                                    val start = dragStartPosition
+                                    
+                                    // Only mark as dragged if we moved beyond touch slop
+                                    if (start != null) {
+                                        val distance = (change.position - start).getDistance()
+                                        if (distance > viewConfiguration.touchSlop) {
+                                            hasDragged = true
+                                        }
+                                    } else {
+                                        // Fallback if start not captured (should impossible)
+                                        hasDragged = true
                                     }
-                                    // Don't consume change creates smoother scroll interop sometimes, but here we handle scroll manually
-                                    // change.consume() 
+                                    
+                                    if (hasDragged) {
+                                        val index = getItemIndexFromOffset(change.position)
+                                        if (index != null) {
+                                            currentDragIndex = index
+                                        }
+                                    }
                                 }
                             )
                         }

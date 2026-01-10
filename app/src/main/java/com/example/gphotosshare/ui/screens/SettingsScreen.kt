@@ -43,9 +43,10 @@ fun SettingsScreen(
     currentKeepSelection: Boolean,
     currentShowThumbnails: Boolean,
     currentCheckLowStorage: Boolean,
+    currentQuickOpen: Boolean,
     selectedFileCount: Int,
     onBack: () -> Unit,
-    onSave: (String, String?, Boolean, Boolean, Boolean) -> Unit,
+    onSave: (String, String?, Boolean, Boolean, Boolean, Boolean) -> Unit,
     onReset: () -> Unit
 ) {
     var path by remember { mutableStateOf(currentDefaultPath) }
@@ -53,6 +54,7 @@ fun SettingsScreen(
     var keepSelection by remember { mutableStateOf(currentKeepSelection) }
     var showThumbnails by remember { mutableStateOf(currentShowThumbnails) }
     var checkLowStorage by remember { mutableStateOf(currentCheckLowStorage) }
+    var quickOpen by remember { mutableStateOf(currentQuickOpen) }
     
     // Internal Navigation State
     var pageState by remember { mutableStateOf(SettingsPage.MAIN) }
@@ -74,7 +76,8 @@ fun SettingsScreen(
                selectedComponent != currentTargetAppPackage ||
                keepSelection != currentKeepSelection ||
                showThumbnails != currentShowThumbnails ||
-               checkLowStorage != currentCheckLowStorage
+               checkLowStorage != currentCheckLowStorage ||
+               quickOpen != currentQuickOpen
     }
 
     var showUnsavedDialog by remember { mutableStateOf(false) }
@@ -102,7 +105,7 @@ fun SettingsScreen(
             text = { Text("You have unsaved changes. Do you want to save them?") },
             confirmButton = {
                 TextButton(onClick = {
-                    onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage)
+                    onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen)
                     showUnsavedDialog = false
                     onBack() // Redirect back after saving
                 }) { Text("Save") }
@@ -204,7 +207,7 @@ fun SettingsScreen(
                 actions = {
                     if (pageState == SettingsPage.MAIN) {
                          TextButton(onClick = {
-                             onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage)
+                             onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen)
                          }) {
                              Text("Save")
                          }
@@ -361,9 +364,23 @@ fun SettingsScreen(
                             modifier = Modifier.clickable { checkLowStorage = !checkLowStorage }
                         )
                     }
-                    
+
                     item {
-                         Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
+                        ListItem(
+                            headlineContent = { Text("Quick Open") },
+                            supportingContent = { Text("Long press to open file (if not dragging)") },
+                            trailingContent = {
+                                Switch(
+                                    checked = quickOpen,
+                                    onCheckedChange = { quickOpen = it }
+                                )
+                            },
+                            modifier = Modifier.clickable { quickOpen = !quickOpen }
+                        )
+                    }
+
+                    item {
+                        Box(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), contentAlignment = Alignment.Center) {
                              Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                  TextButton(
                                      onClick = { onReset() }

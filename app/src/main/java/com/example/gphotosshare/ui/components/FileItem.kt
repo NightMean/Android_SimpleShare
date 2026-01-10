@@ -49,7 +49,7 @@ fun FileListItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
+            // Click handled by parent gestures
             .background(if (file.isSelected) MaterialTheme.colorScheme.primaryContainer else Color.Transparent)
             .padding(12.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -96,7 +96,7 @@ fun FileGridItem(
             .fillMaxWidth()
             .padding(4.dp)
             .aspectRatio(1f)
-            .clickable { onClick() }
+            // Click handled by parent gestures
             .border(
                 width = if (file.isSelected) 3.dp else 0.dp,
                 color = if (file.isSelected) MaterialTheme.colorScheme.primary else Color.Transparent,
