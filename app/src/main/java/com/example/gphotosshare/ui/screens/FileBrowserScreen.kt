@@ -537,16 +537,15 @@ fun FileBrowserScreen(
                         
                         if (totalItems == 0 || visibleItemsCount == 0 || itemSize <= 0) 0f to 0f
                         else {
-                             val viewportHeight: Int = if (isGridView) gridState.layoutInfo.viewportSize.height else listState.layoutInfo.viewportSize.height
+                             val viewportHeight: Float = if (isGridView) gridState.layoutInfo.viewportSize.height.toFloat() else listState.layoutInfo.viewportSize.height.toFloat()
                              
-                             val estimatedTotalContentHeight = itemSize.toFloat() * totalItems
-                             val fraction = (viewportHeight.toFloat() / estimatedTotalContentHeight).coerceIn(0f, 1f)
-                             val offsetFraction = firstOffset.toFloat() / itemSize.toFloat()
-                             val effectiveIndex = firstIndex + offsetFraction
+                             val contentHeight = itemSize.toFloat() * totalItems
+                             val scrollOffset = (firstIndex * itemSize) + firstOffset
                              
-                             // Fix jitter: Use totalItems as denominator. 
-                             // Using (totalItems - visibleItems) causes jumps when visible items count changes due to variable item sizes.
-                             val progress = (effectiveIndex / totalItems.toFloat()).coerceIn(0f, 1f)
+                             val fraction = (viewportHeight / contentHeight).coerceIn(0f, 1f)
+                             
+                             // Fix: usage of (contentHeight - viewportHeight) as denominator ensures we reach 1.0 at the end
+                             val progress = (scrollOffset / (contentHeight - viewportHeight)).coerceIn(0f, 1f)
                              progress to fraction
                         }
                     }

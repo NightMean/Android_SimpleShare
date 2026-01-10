@@ -163,7 +163,7 @@ class MainActivity : ComponentActivity() {
                     currentCheckLowStorage = checkLowStorage,
                     selectedFileCount = selectedFiles.size,
                     onBack = { currentScreen = com.example.gphotosshare.ui.Screen.BROWSER },
-                    onClearSelection = { selectedFiles.clear() },
+
                     onSave = { path, targetApp, keepSel, showIcons, checkSpace ->
                         val editor = prefs.edit()
                         editor.putString(KEY_DEFAULT_PATH, path)

@@ -28,7 +28,6 @@ import com.example.gphotosshare.data.AppRepository
 import androidx.compose.foundation.background
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.launch
 import com.example.gphotosshare.ui.components.TooltipIconButton
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
@@ -46,7 +45,6 @@ fun SettingsScreen(
     currentCheckLowStorage: Boolean,
     selectedFileCount: Int,
     onBack: () -> Unit,
-    onClearSelection: () -> Unit,
     onSave: (String, String?, Boolean, Boolean, Boolean) -> Unit,
     onReset: () -> Unit
 ) {
@@ -55,8 +53,6 @@ fun SettingsScreen(
     var keepSelection by remember { mutableStateOf(currentKeepSelection) }
     var showThumbnails by remember { mutableStateOf(currentShowThumbnails) }
     var checkLowStorage by remember { mutableStateOf(currentCheckLowStorage) }
-    
-    val coroutineScope = rememberCoroutineScope()
     
     // Internal Navigation State
     var pageState by remember { mutableStateOf(SettingsPage.MAIN) }
