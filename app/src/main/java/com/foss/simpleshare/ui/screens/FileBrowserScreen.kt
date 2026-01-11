@@ -54,6 +54,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.GridView
 import androidx.compose.material.icons.filled.List
 import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Settings
@@ -109,6 +110,9 @@ import kotlinx.coroutines.withContext
 import java.io.File
 import java.util.Locale
 
+import androidx.compose.ui.res.painterResource
+import com.foss.simpleshare.R
+
 enum class SortOption {
     NAME, SIZE, DATE, TYPE
 }
@@ -140,6 +144,14 @@ fun FileBrowserScreen(
     var isLoading by remember { mutableStateOf(true) } // Track loading state
     // var isGridView by remember { mutableStateOf(false) } // Hoisted to MainActivity
     var showLowSpaceDialog by remember { mutableStateOf(false) }
+
+    val coroutineScope = rememberCoroutineScope() // Moved up
+    
+    // Deletion State
+    var showDeleteConfirmDialog by remember { mutableStateOf(false) }
+    var isDeleting by remember { mutableStateOf(false) }
+
+    var deletedCount by remember { mutableStateOf(0) }
 
     // Logic States
     var searchQuery by remember { mutableStateOf("") }
@@ -176,6 +188,69 @@ fun FileBrowserScreen(
         }
     }
 
+
+
+    fun refreshFiles() {
+        rawFiles = repository.listFiles(currentPath, allowedExtensions) // Pass extensions
+    }
+    
+    // Deletion Logic
+    fun onDeleteConfirmed() {
+        showDeleteConfirmDialog = false
+        isDeleting = true
+        
+        val filesToDelete = selectedFiles.toList() // Copy list
+        
+        coroutineScope.launch {
+            // If many files, maybe show progress logic, but deleteFiles is atomic-ish in our repo currently.
+            // For better UX on large lists, we could chunk it or move logic here.
+            // For now, simple bulk delete.
+            val count = repository.deleteFiles(filesToDelete)
+            
+            withContext(Dispatchers.Main) {
+                isDeleting = false
+                deletedCount = count
+                Toast.makeText(context, "Deleted $count files", Toast.LENGTH_SHORT).show()
+                selectedFiles.clear()
+                refreshFiles()
+            }
+        }
+    }
+
+    // Dialogs (Moved from derivedStateOf)
+    if (showDeleteConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirmDialog = false },
+            title = { Text("Delete Files?") },
+            text = { Text("Are you sure you want to delete ${selectedFiles.size} selected item(s)? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(onClick = { onDeleteConfirmed() }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirmDialog = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+        
+    if (isDeleting) {
+            AlertDialog(
+            onDismissRequest = { }, // Prevent dismiss
+            title = { Text("Deleting...") },
+            text = { 
+                Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                    androidx.compose.material3.CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text("Please wait")
+                }
+            },
+            confirmButton = {}
+        )
+    }
+
     // Load files (with cached sizes applied for folders)
     LaunchedEffect(currentPath, allowedExtensions) {
         isLoading = true
@@ -204,9 +279,6 @@ fun FileBrowserScreen(
         }
     }
     
-    fun refreshFiles() {
-        rawFiles = repository.listFiles(currentPath, allowedExtensions) // Pass extensions
-    }
 
     // Filter and Sort Logic
     // Filter and Sort Logic
@@ -315,7 +387,7 @@ fun FileBrowserScreen(
 
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
-    val coroutineScope = rememberCoroutineScope()
+    // val coroutineScope = rememberCoroutineScope() // Moved up to line 142
     
     // Auto-scroll to top when sort options change
     LaunchedEffect(sortOption, isSortAscending, sortFoldersFirst) {
@@ -394,6 +466,20 @@ fun FileBrowserScreen(
                             Icon(Icons.Default.Close, contentDescription = "Clear")
                         }
                     } else {
+                        // Delete Button (Only when selection active)
+                        if (selectedFiles.isNotEmpty()) {
+                            TooltipIconButton(
+                                onClick = { showDeleteConfirmDialog = true }, 
+                                tooltip = "Delete"
+                            ) {
+                                Icon(
+                                    painter = painterResource(id = R.drawable.delete_24),
+                                    contentDescription = "Delete",
+                                    tint = Color.Red
+                                )
+                            }
+                        }
+                        
                         TooltipIconButton(onClick = onSettingsClick, tooltip = "Settings") {
                             Icon(Icons.Default.Settings, contentDescription = "Settings")
                         }

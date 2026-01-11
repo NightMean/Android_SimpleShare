@@ -139,5 +139,30 @@ class FileRepository(private val directoryCacheDao: DirectoryCacheDao? = null) {
         }
         return length
     }
+    /**
+     * Delete a list of files. Returns the number of successfully deleted files.
+     */
+    suspend fun deleteFiles(files: List<FileModel>): Int = withContext(Dispatchers.IO) {
+        var deletedCount = 0
+        files.forEach { fileModel ->
+            val file = fileModel.file
+            if (file.exists()) {
+                val success = if (file.isDirectory) {
+                    file.deleteRecursively()
+                } else {
+                    file.delete()
+                }
+                
+                if (success) {
+                    deletedCount++
+                    // Invalidate cache if it was a directory
+                    if (fileModel.isDirectory) {
+                        directoryCacheDao?.deleteByPath(fileModel.path)
+                    }
+                }
+            }
+        }
+        deletedCount
+    }
 }
 
