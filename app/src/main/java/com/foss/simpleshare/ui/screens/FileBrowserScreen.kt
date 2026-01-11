@@ -137,6 +137,7 @@ fun FileBrowserScreen(
     onSortChange: (SortOption, Boolean, Boolean) -> Unit
 ) {
     var rawFiles by remember { mutableStateOf(emptyList<FileModel>()) }
+    var isLoading by remember { mutableStateOf(true) } // Track loading state
     // var isGridView by remember { mutableStateOf(false) } // Hoisted to MainActivity
     var showLowSpaceDialog by remember { mutableStateOf(false) }
 
@@ -175,10 +176,31 @@ fun FileBrowserScreen(
         }
     }
 
-    // Load files
+    // Load files (with cached sizes applied for folders)
     LaunchedEffect(currentPath, allowedExtensions) {
-        withContext(Dispatchers.IO) {
-            rawFiles = repository.listFiles(currentPath, allowedExtensions)
+        isLoading = true
+        rawFiles = repository.listFilesWithCachedSizes(currentPath, allowedExtensions)
+        isLoading = false
+    }
+
+    // Async folder size loading: check cache first, then calculate if needed
+    LaunchedEffect(rawFiles) {
+        val folders = rawFiles.filter { it.isDirectory && it.size == -1L }
+        if (folders.isEmpty()) return@LaunchedEffect
+
+        folders.forEach { folder ->
+            launch {
+                // Calculate on IO thread
+                val size = withContext(Dispatchers.IO) {
+                    repository.getCachedSize(folder.path)
+                        ?: repository.calculateAndCacheSize(folder.path)
+                }
+                
+                // Update UI on main thread (already on Main since withContext returns)
+                rawFiles = rawFiles.map { file ->
+                    if (file.path == folder.path) file.copy(size = size) else file
+                }
+            }
         }
     }
     
@@ -511,7 +533,14 @@ fun FileBrowserScreen(
             
             if (displayedFiles.isEmpty()) {
                 Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    Text(if (isSearchActive) "No results found" else "No files found", style = MaterialTheme.typography.bodyLarge)
+                    Text(
+                        text = when {
+                            isSearchActive -> "No results found"
+                            isLoading -> "Loading..."
+                            else -> "No files found"
+                        },
+                        style = MaterialTheme.typography.bodyLarge
+                    )
                 }
             } else {
                 // Drag Selection Logic
@@ -769,12 +798,6 @@ fun FileBrowserScreen(
                 // Fast Scroll Implementation
                 val scrollStateValues = remember(isGridView, listState, gridState, displayedFiles) {
                     derivedStateOf {
-                        val totalItems: Int
-                        val visibleItemsCount: Int
-                        val firstIndex: Int
-                        val firstOffset: Int
-                        val itemSize: Int
-                        
                         if (isGridView) {
                             val layout = gridState.layoutInfo
                             val totalItems = layout.totalItemsCount

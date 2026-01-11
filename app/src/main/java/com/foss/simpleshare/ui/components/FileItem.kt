@@ -99,6 +99,16 @@ fun FileListItem(
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
+            } else {
+                // Show placeholder "..." when size is being calculated (-1L)
+                val sizeText = if (file.size == -1L) "..." else formatFileSize(file.size)
+                 Text(
+                    text = "${file.itemCount} items • $sizeText",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
             }
         }
 

@@ -39,7 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.app.ActivityCompat
 import androidx.lifecycle.lifecycleScope
 import com.foss.simpleshare.data.FileRepository
-// import com.foss.simpleshare.ui.components.SettingsDialog (Deleted)
+import com.foss.simpleshare.data.AppDatabase
 import com.foss.simpleshare.ui.screens.FileBrowserScreen
 import com.foss.simpleshare.ui.theme.SimpleShareTheme
 
@@ -92,7 +92,12 @@ class MainActivity : ComponentActivity() {
         }
         
         // Define default path from prefs, but also keep track of current browsing path
-        val savedDefaultPath = prefs.getString(KEY_DEFAULT_PATH, FileRepository().getDefaultPath()) ?: FileRepository().getDefaultPath()
+        // Initialize database for folder size caching (use application context)
+        val appContext = LocalContext.current.applicationContext
+        val database = remember { AppDatabase.getDatabase(appContext) }
+        val directoryCacheDao = remember { database.directoryCacheDao() }
+        
+        val savedDefaultPath = prefs.getString(KEY_DEFAULT_PATH, FileRepository(directoryCacheDao).getDefaultPath()) ?: FileRepository(directoryCacheDao).getDefaultPath()
         val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
         val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) 
@@ -186,7 +191,7 @@ class MainActivity : ComponentActivity() {
                 confirmButton = {
                     TextButton(
                         onClick = {
-                            val newPath = FileRepository().getDefaultPath()
+                            val newPath = FileRepository(directoryCacheDao).getDefaultPath()
                             // Reset State
                             currentPath = newPath
                             // Update Prefs
@@ -205,7 +210,7 @@ class MainActivity : ComponentActivity() {
              // Legacy PermissionScreen block removed, handled by SetupScreen
         }
 
-        val repository = remember { FileRepository() }
+        val repository = remember { FileRepository(directoryCacheDao) }
         
         // NAVIGATION HOST
         when (currentScreen) {

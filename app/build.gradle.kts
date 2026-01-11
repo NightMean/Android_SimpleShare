@@ -71,6 +71,11 @@ dependencies {
     // Accompanist
     implementation("com.google.accompanist:accompanist-drawablepainter:0.32.0")
 
+    // Room (Persistent Folder Size Cache)
+    implementation("androidx.room:room-runtime:2.6.1")
+    implementation("androidx.room:room-ktx:2.6.1")
+    ksp("androidx.room:room-compiler:2.6.1")
+
     // Icons
     implementation("androidx.compose.material:material-icons-extended")
 
