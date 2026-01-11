@@ -9,5 +9,6 @@ data class FileModel(
     val isDirectory: Boolean,
     val size: Long,
     val extension: String,
+    val itemCount: Int = 0,
     var isSelected: Boolean = false
 )

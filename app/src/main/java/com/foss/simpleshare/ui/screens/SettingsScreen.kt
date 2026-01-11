@@ -78,29 +78,24 @@ fun SettingsScreen(
     // Warning Dialog Trigger
     var showClearSelectionWarning by remember { mutableStateOf(false) }
 
-    // Dirty State Tracking (Initial values vs Current values)
-    fun isDirty(): Boolean {
-        return path != currentDefaultPath ||
-               selectedComponent != currentTargetAppPackage ||
-               keepSelection != currentKeepSelection ||
-               showThumbnails != currentShowThumbnails ||
-               checkLowStorage != currentCheckLowStorage ||
-               quickOpen != currentQuickOpen ||
-               filterMode != currentFilterMode ||
-               customExtensions != currentCustomExtensions
-    }
-
+    // Dirty State Tracking simplified (recalculated on recomposition)
+    val isDirty = path != currentDefaultPath ||
+                  selectedComponent != currentTargetAppPackage ||
+                  keepSelection != currentKeepSelection ||
+                  showThumbnails != currentShowThumbnails ||
+                  checkLowStorage != currentCheckLowStorage ||
+                  quickOpen != currentQuickOpen ||
+                  filterMode != currentFilterMode ||
+                  customExtensions != currentCustomExtensions
+                  
     var showUnsavedDialog by remember { mutableStateOf(false) }
 
     // Handle Back Press
     BackHandler {
         if (pageState == SettingsPage.APP_SELECTION) {
-             // If searching, clear search first? Or just go back?
-             // Standard behavior: Close search if active, or go back.
-             // Here we keep it simple: Go back to Main.
             pageState = SettingsPage.MAIN
         } else {
-            if (isDirty()) {
+            if (isDirty) {
                 showUnsavedDialog = true
             } else {
                 onBack()
@@ -202,7 +197,7 @@ fun SettingsScreen(
                                     pageState = SettingsPage.MAIN
                                 }
                             } else {
-                                if (isDirty()) {
+                                if (isDirty) {
                                     showUnsavedDialog = true
                                 } else {
                                     onBack()
