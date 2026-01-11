@@ -78,6 +78,33 @@ fun SettingsScreen(
     // Warning Dialog Trigger
     var showClearSelectionWarning by remember { mutableStateOf(false) }
 
+    var isCustomExtError by remember { mutableStateOf(false) }
+
+    // Reusable Validation Function
+    fun validateAndSave(goBackAfterSave: Boolean = false) {
+        val file = File(path)
+        if (!file.exists() || !file.isDirectory) {
+            isPathError = true
+            android.widget.Toast.makeText(context, "Invalid default folder path. Please enter a valid directory.", android.widget.Toast.LENGTH_LONG).show()
+            return
+        }
+
+        if (filterMode == "CUSTOM") {
+            val hasValidChar = customExtensions.any { it.isLetterOrDigit() }
+            if (!hasValidChar) {
+                isCustomExtError = true
+                android.widget.Toast.makeText(context, "Please enter at least one file extension (e.g. pdf, zip, 7z)", android.widget.Toast.LENGTH_LONG).show()
+                return
+            }
+        }
+
+        onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
+        
+        if (goBackAfterSave) {
+            onBack()
+        }
+    }
+
     // Dirty State Tracking simplified (recalculated on recomposition)
     val isDirty = path != currentDefaultPath ||
                   selectedComponent != currentTargetAppPackage ||
@@ -110,22 +137,16 @@ fun SettingsScreen(
             text = { Text("You have unsaved changes. Do you want to save them?") },
             confirmButton = {
                 TextButton(onClick = {
-                    onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
                     showUnsavedDialog = false
-                    onBack() // Redirect back after saving
+                    validateAndSave(goBackAfterSave = true)
                 }) { Text("Save") }
             },
             dismissButton = {
                 TextButton(onClick = { 
-                    // Discard changes? Or just close dialog?
-                    // User probably wants to exit.
                     showUnsavedDialog = false
                     onBack() 
                 }) { Text("Discard") }
             },
-            // Add a Cancel button?
-            // "DismissButton" acts as negative action. "Confirm" as positive.
-            // Maybe a third button? Standard Dialog has Confirm/Dismiss.
         )
     }
     
@@ -211,25 +232,7 @@ fun SettingsScreen(
                 },
                 actions = {
                     if (pageState == SettingsPage.MAIN) {
-                         TextButton(onClick = {
-                             // Validation
-                             // Validation
-                             val file = File(path)
-                             if (!file.exists() || !file.isDirectory) {
-                                 isPathError = true
-                                 android.widget.Toast.makeText(context, "Invalid default folder path. Please enter a valid directory.", android.widget.Toast.LENGTH_LONG).show()
-                                 return@TextButton
-                             }
-
-                             if (filterMode == "CUSTOM") {
-                                 val hasValidChar = customExtensions.any { it.isLetterOrDigit() }
-                                 if (!hasValidChar) {
-                                     android.widget.Toast.makeText(context, "Please enter at least one file extension (e.g. pdf, zip, 7z)", android.widget.Toast.LENGTH_LONG).show()
-                                     return@TextButton
-                                 }
-                             }
-                             onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
-                         }) {
+                         TextButton(onClick = { validateAndSave(goBackAfterSave = false) }) {
                              Text("Save")
                          }
                     } else {
@@ -454,7 +457,11 @@ fun SettingsScreen(
                                 selectedMode = filterMode,
                                 customExtensions = customExtensions,
                                 onModeSelected = { filterMode = it },
-                                onCustomExtensionsChanged = { customExtensions = it }
+                                onCustomExtensionsChanged = { 
+                                    customExtensions = it
+                                    isCustomExtError = false
+                                },
+                                isError = isCustomExtError
                             )
                         }
                     }

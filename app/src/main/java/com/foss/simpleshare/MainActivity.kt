@@ -97,7 +97,11 @@ class MainActivity : ComponentActivity() {
         val database = remember { AppDatabase.getDatabase(appContext) }
         val directoryCacheDao = remember { database.directoryCacheDao() }
         
-        val savedDefaultPath = prefs.getString(KEY_DEFAULT_PATH, FileRepository(directoryCacheDao).getDefaultPath()) ?: FileRepository(directoryCacheDao).getDefaultPath()
+        val initialDefaultPath = remember {
+            prefs.getString(KEY_DEFAULT_PATH, FileRepository(directoryCacheDao).getDefaultPath()) ?: FileRepository(directoryCacheDao).getDefaultPath()
+        }
+        var defaultPathSetting by remember { mutableStateOf(initialDefaultPath) }
+
         val savedKeepSelection = prefs.getBoolean(KEY_KEEP_SELECTION, true) // Default true
         val savedShowThumbnails = prefs.getBoolean(KEY_SHOW_THUMBNAILS, true) // Default true
         val savedCheckLowStorage = prefs.getBoolean(KEY_CHECK_LOW_STORAGE, false) 
@@ -109,8 +113,8 @@ class MainActivity : ComponentActivity() {
         val savedSortAscending = prefs.getBoolean(KEY_SORT_ASCENDING, true)
         val savedSortFoldersFirst = prefs.getBoolean(KEY_SORT_FOLDERS_FIRST, true)
 
-        // We initialize currentPath with savedDefaultPath
-        var currentPath by remember { mutableStateOf(savedDefaultPath) }
+        // We initialize currentPath with initialDefaultPath
+        var currentPath by remember { mutableStateOf(initialDefaultPath) }
         var keepSelection by remember { mutableStateOf(savedKeepSelection) }
         var showThumbnails by remember { mutableStateOf(savedShowThumbnails) }
         var checkLowStorage by remember { mutableStateOf(savedCheckLowStorage) }
@@ -177,7 +181,7 @@ class MainActivity : ComponentActivity() {
         var showInvalidPathDialog by remember { mutableStateOf(false) }
         
         LaunchedEffect(Unit) {
-            val file = File(savedDefaultPath)
+            val file = File(defaultPathSetting)
             if (!file.exists() || !file.isDirectory) {
                 showInvalidPathDialog = true
             }
@@ -187,13 +191,14 @@ class MainActivity : ComponentActivity() {
             AlertDialog(
                 onDismissRequest = { /* Force user to acknowledge */ },
                 title = { Text("Default Path Not Found") },
-                text = { Text("The default path you set (\"${File(savedDefaultPath).absolutePath}\") no longer exists. The app will reset to the main storage directory.") },
+                text = { Text("The default path you set (\"${File(defaultPathSetting).absolutePath}\") no longer exists. The app will reset to the main storage directory.") },
                 confirmButton = {
                     TextButton(
                         onClick = {
                             val newPath = FileRepository(directoryCacheDao).getDefaultPath()
                             // Reset State
                             currentPath = newPath
+                            defaultPathSetting = newPath // Update setting too
                             // Update Prefs
                             prefs.edit().putString(KEY_DEFAULT_PATH, newPath).apply()
                             
@@ -252,7 +257,7 @@ class MainActivity : ComponentActivity() {
             }
             com.foss.simpleshare.ui.Screen.SETTINGS -> {
                 com.foss.simpleshare.ui.screens.SettingsScreen(
-                    currentDefaultPath = savedDefaultPath,
+                    currentDefaultPath = defaultPathSetting,
                     currentBrowserPath = currentPath,
                     currentTargetAppPackage = targetAppPackage, // Can be null now
                     currentKeepSelection = keepSelection,
@@ -267,6 +272,10 @@ class MainActivity : ComponentActivity() {
                     onSave = { path, targetApp, keepSel, showIcons, checkSpace, qOpen, fMode, cExt ->
                         val editor = prefs.edit()
                         editor.putString(KEY_DEFAULT_PATH, path)
+                        
+                        // Update state to trigger recomposition with new saved value
+                        defaultPathSetting = path
+                        
                         if (targetApp != null) {
                             editor.putString(KEY_TARGET_APP, targetApp)
                             targetAppPackage = targetApp
@@ -277,8 +286,9 @@ class MainActivity : ComponentActivity() {
                         editor.putBoolean(KEY_KEEP_SELECTION, keepSel)
                         keepSelection = keepSel
                         
-                        // If Keep Selection is disabled, we should clear the current selection
-                        if (!keepSel && selectedFiles.isNotEmpty()) {
+                        // If Keep Selection is disabled, or IF VISIBILITY CHANGED, we should clear the current selection
+                        val filterChanged = filterMode != fMode || customExtensions != cExt
+                        if ((!keepSel || filterChanged) && selectedFiles.isNotEmpty()) {
                             selectedFiles.clear()
                         }
                         

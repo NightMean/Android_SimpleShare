@@ -239,43 +239,42 @@ fun FileThumbnail(
                 .background(MaterialTheme.colorScheme.surfaceVariant), // Always show background for consistency
             contentAlignment = Alignment.Center
         ) {
-            // 1. The Base Icon (Always visible underneath, acts as placeholder/fallback)
-            // Fix: Hide the base icon if we are showing a thumbnail for a supported image/video type, 
-            // to prevent it showing through transparent PNGs.
-            val showBaseIcon = if (showThumbnail && (isImage || isVideo)) false else true
-
-            if (showBaseIcon && !isVideo && !isImage && !isAudio && !isArchive && !isPdf && !isDoc && !isApp) {
-                 Box(contentAlignment = Alignment.BottomEnd) {
-                     Icon(
-                        imageVector = Icons.Default.InsertDriveFile,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxSize(0.5f).align(Alignment.Center)
-                    )
-                     Icon(
-                        imageVector = Icons.Default.QuestionMark,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.size(12.dp).align(Alignment.Center) // Overlay center or make it a composite
-                    )
-                 }
-            } else if (showBaseIcon) {
-                Icon(
-                    imageVector = iconVector,
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.fillMaxSize(0.5f)
-                )
+            
+            // Reusable Icon Composable
+            val FileIcon = @Composable {
+                if (!isVideo && !isImage && !isAudio && !isArchive && !isPdf && !isDoc && !isApp) {
+                     Box(contentAlignment = Alignment.BottomEnd, modifier = Modifier.fillMaxSize()) {
+                         Icon(
+                            imageVector = Icons.Default.InsertDriveFile,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxSize(0.5f).align(Alignment.Center)
+                        )
+                         Icon(
+                            imageVector = Icons.Default.QuestionMark,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(12.dp).align(Alignment.Center)
+                        )
+                     }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = iconVector,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxSize(0.5f)
+                        )
+                    }
+                }
             }
 
-            // 2. The Image (Only if enabled and is visual media)
+            // Logic:
+            // 1. Always show FileIcon (Background Layer) -> Handles Loading & Failure states
+            FileIcon()
+            
+            // 2. Show GlideImage (Foreground Layer) -> Covers icon when loaded
             if (showThumbnail && (isImage || isVideo)) {
-                // Ensure base icon is definitely hidden (it's handled by showBaseIcon logic above, 
-                // but let's double check logic there is correct: 
-                // val showBaseIcon = if (showThumbnail && (isImage || isVideo)) false else true
-                // This logic is sound. If user sees icon, then isImage/isVideo MUST be false for that file.
-                // Or showThumbnail is false.
-                
                 com.bumptech.glide.integration.compose.GlideImage(
                     model = file.file,
                     contentDescription = "Thumbnail",

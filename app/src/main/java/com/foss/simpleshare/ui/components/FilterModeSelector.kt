@@ -27,7 +27,8 @@ fun FilterModeSelector(
     selectedMode: String,
     customExtensions: String,
     onModeSelected: (String) -> Unit,
-    onCustomExtensionsChanged: (String) -> Unit
+    onCustomExtensionsChanged: (String) -> Unit,
+    isError: Boolean = false
 ) {
     Column {
         
@@ -173,6 +174,7 @@ fun FilterModeSelector(
                         placeholder = { Text("e.g. pdf, zip, .apk") },
                         modifier = Modifier.fillMaxWidth(),
                         singleLine = true,
+                        isError = isError,
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedContainerColor = Color.Transparent,
