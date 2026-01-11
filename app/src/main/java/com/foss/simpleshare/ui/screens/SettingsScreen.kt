@@ -32,6 +32,9 @@ import androidx.compose.material.icons.filled.Search
 import kotlinx.coroutines.launch
 import com.foss.simpleshare.ui.components.TooltipIconButton
 import com.google.accompanist.drawablepainter.rememberDrawablePainter
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.BugReport
 
 private enum class SettingsPage { MAIN, APP_SELECTION }
 
@@ -69,6 +72,7 @@ fun SettingsScreen(
     var pageState by remember { mutableStateOf(SettingsPage.MAIN) }
     
     val context = androidx.compose.ui.platform.LocalContext.current
+    val uriHandler = LocalUriHandler.current
     val appRepository = remember { AppRepository(context) }
     var apps by remember { mutableStateOf(emptyList<AppModel>()) }
     var isLoadingApps by remember { mutableStateOf(true) }
@@ -469,6 +473,42 @@ fun SettingsScreen(
                                 isError = isCustomExtError
                             )
                         }
+                    }
+
+                    item(key = "divider_3") {
+                        Divider(modifier = Modifier.padding(vertical = 16.dp))
+                    }
+
+                    // Section: Support
+                    item(key = "header_support") {
+                        Text(
+                            text = "Support",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
+                        )
+                    }
+
+                    item(key = "item_github") {
+                        ListItem(
+                            headlineContent = { Text("GitHub Project") },
+                            supportingContent = { Text("View source code and contributors") },
+                            leadingContent = { Icon(Icons.Default.Info, contentDescription = null) },
+                            modifier = Modifier.clickable { 
+                                uriHandler.openUri("https://github.com/NightMean/Android_SimpleShare")
+                            }
+                        )
+                    }
+
+                    item(key = "item_report") {
+                        ListItem(
+                            headlineContent = { Text("Report an Issue") },
+                            supportingContent = { Text("Found a bug? Let us know on GitHub") },
+                            leadingContent = { Icon(Icons.Default.BugReport, contentDescription = null) },
+                            modifier = Modifier.clickable { 
+                                uriHandler.openUri("https://github.com/NightMean/Android_SimpleShare/issues")
+                            }
+                        )
                     }
 
                     item(key = "footer_reset") {
