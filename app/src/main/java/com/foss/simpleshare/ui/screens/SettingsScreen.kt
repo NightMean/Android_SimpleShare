@@ -413,8 +413,8 @@ fun SettingsScreen(
 
                     item(key = "switch_check_storage") {
                         ListItem(
-                            headlineContent = { Text("Check Free Space") },
-                            supportingContent = { Text("Useful for apps which might copy shared files to internal memory") },
+                            headlineContent = { Text("Validate Free Space") },
+                            supportingContent = { Text("Check if internal storage has enough space for a copy of the selected files (Some apps might copy shared files to cache)") },
                             trailingContent = {
                                 Switch(
                                     checked = checkLowStorage,

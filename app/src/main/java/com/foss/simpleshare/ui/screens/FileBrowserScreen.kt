@@ -130,15 +130,17 @@ fun FileBrowserScreen(
     allowedExtensions: Set<String>, // New filter parameter
     isGridView: Boolean,
     onViewModeChange: (Boolean) -> Unit,
-    onSettingsClick: () -> Unit
+    onSettingsClick: () -> Unit,
+    sortOption: SortOption,
+    isSortAscending: Boolean,
+    sortFoldersFirst: Boolean,
+    onSortChange: (SortOption, Boolean, Boolean) -> Unit
 ) {
     var rawFiles by remember { mutableStateOf(emptyList<FileModel>()) }
     // var isGridView by remember { mutableStateOf(false) } // Hoisted to MainActivity
     var showLowSpaceDialog by remember { mutableStateOf(false) }
 
     // Logic States
-    var sortOption by remember { mutableStateOf(SortOption.NAME) }
-    var isSortAscending by remember { mutableStateOf(true) }
     var searchQuery by remember { mutableStateOf("") }
     var isSearchActive by remember { mutableStateOf(false) }
     var showSortMenu by remember { mutableStateOf(false) }
@@ -185,7 +187,7 @@ fun FileBrowserScreen(
     }
 
     // Filter and Sort Logic
-    var sortFoldersFirst by remember { mutableStateOf(true) }
+    // Filter and Sort Logic
 
     // Filter and Sort Logic
     val displayedFiles by remember(rawFiles, searchQuery, sortOption, isSortAscending, sortFoldersFirst) {
@@ -292,6 +294,15 @@ fun FileBrowserScreen(
     val listState = androidx.compose.foundation.lazy.rememberLazyListState()
     val gridState = androidx.compose.foundation.lazy.grid.rememberLazyGridState()
     val coroutineScope = rememberCoroutineScope()
+    
+    // Auto-scroll to top when sort options change
+    LaunchedEffect(sortOption, isSortAscending, sortFoldersFirst) {
+        if (isGridView) {
+            gridState.scrollToItem(0)
+        } else {
+            listState.scrollToItem(0)
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -423,7 +434,7 @@ fun FileBrowserScreen(
                             DropdownMenuItem(
                                 text = { Text("Folders first") },
                                 onClick = {
-                                    sortFoldersFirst = !sortFoldersFirst
+                                    onSortChange(sortOption, isSortAscending, !sortFoldersFirst)
                                     showSortMenu = false
                                 },
                                 trailingIcon = {
@@ -453,10 +464,9 @@ fun FileBrowserScreen(
                                     },
                                     onClick = { 
                                         if (sortOption == option) {
-                                            isSortAscending = !isSortAscending
+                                            onSortChange(sortOption, !isSortAscending, sortFoldersFirst)
                                         } else {
-                                            sortOption = option
-                                            isSortAscending = true // Default to asc for new sort
+                                            onSortChange(option, true, sortFoldersFirst)
                                         }
                                         showSortMenu = false
                                     }
@@ -765,34 +775,63 @@ fun FileBrowserScreen(
                         
                         if (isGridView) {
                             val layout = gridState.layoutInfo
-                            totalItems = layout.totalItemsCount
+                            val totalItems = layout.totalItemsCount
+                            
                             val visibleInfo = layout.visibleItemsInfo
-                            visibleItemsCount = visibleInfo.size
-                            firstIndex = gridState.firstVisibleItemIndex
-                            firstOffset = gridState.firstVisibleItemScrollOffset
-                            itemSize = gridState.layoutInfo.visibleItemsInfo.firstOrNull()?.size?.height ?: 0
+                            if (totalItems == 0 || visibleInfo.isEmpty()) {
+                                0f to 0f
+                            } else {
+                                val firstItem = visibleInfo.first()
+                                val itemHeight = firstItem.size.height
+                                val itemWidth = firstItem.size.width
+                                val viewportWidth = layout.viewportSize.width
+                                val viewportHeight = layout.viewportSize.height.toFloat()
+                                
+                                if (itemHeight <= 0 || itemWidth <= 0) {
+                                    0f to 0f 
+                                } else {
+                                    val spanCount = (viewportWidth / itemWidth).coerceAtLeast(1)
+                                    val totalRows = (totalItems + spanCount - 1) / spanCount
+                                    
+                                    // Use Row Index for calculation
+                                    val currentRow = gridState.firstVisibleItemIndex / spanCount
+                                    val rowOffset = gridState.firstVisibleItemScrollOffset
+                                    
+                                    val contentHeight = totalRows * itemHeight.toFloat()
+                                    val scrollOffset = (currentRow * itemHeight) + rowOffset
+                                    
+                                    val fraction = (viewportHeight / contentHeight).coerceIn(0f, 1f)
+                                    val progress = if (contentHeight > viewportHeight) 
+                                        (scrollOffset / (contentHeight - viewportHeight)).coerceIn(0f, 1f)
+                                    else 0f
+                                    
+                                    progress to fraction
+                                }
+                            }
                         } else {
                             val layout = listState.layoutInfo
-                            totalItems = layout.totalItemsCount
+                            val totalItems = layout.totalItemsCount
+                            
                             val visibleInfo = layout.visibleItemsInfo
-                            visibleItemsCount = visibleInfo.size
-                            firstIndex = listState.firstVisibleItemIndex
-                            firstOffset = listState.firstVisibleItemScrollOffset
-                            itemSize = listState.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: 0
-                        }
-                        
-                        if (totalItems == 0 || visibleItemsCount == 0 || itemSize <= 0) 0f to 0f
-                        else {
-                             val viewportHeight: Float = if (isGridView) gridState.layoutInfo.viewportSize.height.toFloat() else listState.layoutInfo.viewportSize.height.toFloat()
-                             
-                             val contentHeight = itemSize.toFloat() * totalItems
-                             val scrollOffset = (firstIndex * itemSize) + firstOffset
-                             
-                             val fraction = (viewportHeight / contentHeight).coerceIn(0f, 1f)
-                             
-                             // Fix: usage of (contentHeight - viewportHeight) as denominator ensures we reach 1.0 at the end
-                             val progress = (scrollOffset / (contentHeight - viewportHeight)).coerceIn(0f, 1f)
-                             progress to fraction
+                            if (totalItems == 0 || visibleInfo.isEmpty()) {
+                                0f to 0f
+                            } else {
+                                val itemHeight = visibleInfo.first().size
+                                val viewportHeight = layout.viewportSize.height.toFloat()
+                                
+                                if (itemHeight <= 0) 0f to 0f
+                                else {
+                                    val contentHeight = itemHeight.toFloat() * totalItems
+                                    val scrollOffset = (listState.firstVisibleItemIndex * itemHeight) + listState.firstVisibleItemScrollOffset
+                                    
+                                    val fraction = (viewportHeight / contentHeight).coerceIn(0f, 1f)
+                                    val progress = if (contentHeight > viewportHeight) 
+                                        (scrollOffset / (contentHeight - viewportHeight)).coerceIn(0f, 1f)
+                                    else 0f
+                                    
+                                    progress to fraction
+                                }
+                            }
                         }
                     }
                 }

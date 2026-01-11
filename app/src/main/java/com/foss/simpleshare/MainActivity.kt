@@ -55,6 +55,9 @@ class MainActivity : ComponentActivity() {
     private val KEY_QUICK_OPEN = "quick_open"
     private val KEY_FILTER_MODE = "filter_mode"
     private val KEY_CUSTOM_EXTENSIONS = "custom_extensions"
+    private val KEY_SORT_OPTION = "sort_option"
+    private val KEY_SORT_ASCENDING = "sort_ascending"
+    private val KEY_SORT_FOLDERS_FIRST = "sort_folders_first"
 
     private lateinit var prefs: SharedPreferences
 
@@ -97,6 +100,10 @@ class MainActivity : ComponentActivity() {
         val savedFilterMode = prefs.getString(KEY_FILTER_MODE, "PRESET_ALL") ?: "PRESET_ALL"
         val savedCustomExtensions = prefs.getString(KEY_CUSTOM_EXTENSIONS, "") ?: ""
 
+        val savedSortOptionStr = prefs.getString(KEY_SORT_OPTION, "NAME") ?: "NAME"
+        val savedSortAscending = prefs.getBoolean(KEY_SORT_ASCENDING, true)
+        val savedSortFoldersFirst = prefs.getBoolean(KEY_SORT_FOLDERS_FIRST, true)
+
         // We initialize currentPath with savedDefaultPath
         var currentPath by remember { mutableStateOf(savedDefaultPath) }
         var keepSelection by remember { mutableStateOf(savedKeepSelection) }
@@ -105,6 +112,10 @@ class MainActivity : ComponentActivity() {
         var quickOpen by remember { mutableStateOf(savedQuickOpen) }
         var filterMode by remember { mutableStateOf(savedFilterMode) }
         var customExtensions by remember { mutableStateOf(savedCustomExtensions) }
+
+        var sortOption by remember { mutableStateOf(try { com.foss.simpleshare.ui.screens.SortOption.valueOf(savedSortOptionStr) } catch(e: Exception) { com.foss.simpleshare.ui.screens.SortOption.NAME }) }
+        var isSortAscending by remember { mutableStateOf(savedSortAscending) }
+        var sortFoldersFirst by remember { mutableStateOf(savedSortFoldersFirst) }
 
         // Compute Allowed Extensions based on Mode
         val allowedExtensions = remember(filterMode, customExtensions) {
@@ -213,7 +224,21 @@ class MainActivity : ComponentActivity() {
                         allowedExtensions = allowedExtensions,
                         isGridView = isGridView,
                         onViewModeChange = { isGridView = it },
-                        onSettingsClick = { currentScreen = com.foss.simpleshare.ui.Screen.SETTINGS }
+                        onSettingsClick = { currentScreen = com.foss.simpleshare.ui.Screen.SETTINGS },
+                        sortOption = sortOption,
+                        isSortAscending = isSortAscending,
+                        sortFoldersFirst = sortFoldersFirst,
+                        onSortChange = { newOption, newAsc, newFoldersFirst ->
+                            sortOption = newOption
+                            isSortAscending = newAsc
+                            sortFoldersFirst = newFoldersFirst
+                            
+                            val editor = prefs.edit()
+                            editor.putString(KEY_SORT_OPTION, newOption.name)
+                            editor.putBoolean(KEY_SORT_ASCENDING, newAsc)
+                            editor.putBoolean(KEY_SORT_FOLDERS_FIRST, newFoldersFirst)
+                            editor.apply()
+                        }
                     )
                 } else {
                     // Fallback if permission lost
@@ -283,6 +308,10 @@ class MainActivity : ComponentActivity() {
                         quickOpen = false // Default
                         filterMode = "PRESET_ALL"
                         customExtensions = ""
+                        
+                        sortOption = com.foss.simpleshare.ui.screens.SortOption.NAME
+                        isSortAscending = true
+                        sortFoldersFirst = true
                         
                         selectedFiles.clear()
                         
