@@ -317,16 +317,21 @@ class MainActivity : ComponentActivity() {
                         editor.apply()
                         
                         targetAppPackage = null
-                        keepSelection = true // Default (Verified from settings usage) Wait, savedKeepSelection default was true.
-                        showThumbnails = true // Default
-                        checkLowStorage = false // Default
-                        quickOpen = false // Default
+                        keepSelection = true 
+                        showThumbnails = true 
+                        checkLowStorage = false 
+                        quickOpen = false 
                         filterMode = "PRESET_ALL"
                         customExtensions = ""
                         
                         sortOption = com.foss.simpleshare.ui.screens.SortOption.NAME
                         isSortAscending = true
                         sortFoldersFirst = true
+                        
+                        // Recalculate default path from Repo (now includes slash)
+                        val newDefaultPath = FileRepository(directoryCacheDao).getDefaultPath()
+                        defaultPathSetting = newDefaultPath
+                        currentPath = newDefaultPath
                         
                         selectedFiles.clear()
                         
