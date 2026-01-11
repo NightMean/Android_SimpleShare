@@ -8,7 +8,7 @@
   <a href="">![GitHub Pull Requests](https://img.shields.io/github/issues-pr/NightMean/Android_SimpleShare?color=blue)</a>
   <a href="">![GitHub License](https://img.shields.io/github/license/NightMean/Android_SimpleShare?style=flat)</a>
   </div>
-<p align="center">Read-only file browser to quickly share files to your favorite app on Android 9 (Pie) and newer</p>
+<p align="center">Android file browser to quickly share files to your favorite app on Android 9 (Pie) and newer</p>
 </div>
 
 ## Overview
