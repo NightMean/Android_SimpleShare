@@ -583,7 +583,9 @@ fun FileBrowserScreen(
                         // New Selection = Initial + Range
                         val newSelectionPaths = initialSelection.toMutableSet()
                         for (i in min..max) {
-                            newSelectionPaths.add(displayedFiles[i].path)
+                            if (!displayedFiles[i].isDirectory) {
+                                newSelectionPaths.add(displayedFiles[i].path)
+                            }
                         }
                         
                         // Sync to selectedFiles
