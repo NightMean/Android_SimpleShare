@@ -59,10 +59,15 @@ fun PathAutocomplete(
             val file = File(input)
             
             // Determine search directory and filter prefix
-            val (searchDir, prefix) = if (input.endsWith("/")) {
-                file to ""
+            val searchDir: File?
+            val prefix: String
+            
+            if (input.endsWith("/")) {
+                searchDir = file
+                prefix = ""
             } else {
-                file.parentFile to file.name
+                searchDir = file.parentFile
+                prefix = file.name
             }
 
             if (searchDir != null && searchDir.exists() && searchDir.isDirectory) {
