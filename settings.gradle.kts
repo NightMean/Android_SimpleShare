@@ -13,5 +13,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "Android GPhotos Share"
+rootProject.name = "SimpleShare"
 include(":app")

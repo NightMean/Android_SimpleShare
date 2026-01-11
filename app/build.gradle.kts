@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "com.example.gphotosshare"
+    namespace = "com.foss.simpleshare"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.gphotosshare"
+        applicationId = "com.foss.simpleshare"
         minSdk = 28
         targetSdk = 34
-        versionCode = 1
-        versionName = "0.7.5"
+        versionCode = 4
+        versionName = "0.7.8"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
