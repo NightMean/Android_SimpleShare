@@ -12,8 +12,8 @@ android {
         applicationId = "com.foss.simpleshare"
         minSdk = 28
         targetSdk = 34
-        versionCode = 4
-        versionName = "0.7.8"
+        versionCode = 5
+        versionName = "0.8.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

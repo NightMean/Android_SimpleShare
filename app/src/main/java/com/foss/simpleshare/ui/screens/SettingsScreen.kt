@@ -52,7 +52,10 @@ fun SettingsScreen(
     onSave: (String, String?, Boolean, Boolean, Boolean, Boolean, String, String) -> Unit,
     onReset: () -> Unit
 ) {
-    var path by remember { mutableStateOf(currentDefaultPath) }
+    var path by remember { mutableStateOf(androidx.compose.ui.text.input.TextFieldValue(
+        text = currentDefaultPath,
+        selection = androidx.compose.ui.text.TextRange(currentDefaultPath.length)
+    )) }
     var selectedComponent by remember { mutableStateOf(currentTargetAppPackage) }
     var keepSelection by remember { mutableStateOf(currentKeepSelection) }
     var showThumbnails by remember { mutableStateOf(currentShowThumbnails) }
@@ -82,7 +85,8 @@ fun SettingsScreen(
 
     // Reusable Validation Function
     fun validateAndSave(goBackAfterSave: Boolean = false) {
-        val file = File(path)
+        val currentPathText = path.text
+        val file = File(currentPathText)
         if (!file.exists() || !file.isDirectory) {
             isPathError = true
             android.widget.Toast.makeText(context, "Invalid default folder path. Please enter a valid directory.", android.widget.Toast.LENGTH_LONG).show()
@@ -98,7 +102,7 @@ fun SettingsScreen(
             }
         }
 
-        onSave(path, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
+        onSave(currentPathText, selectedComponent, keepSelection, showThumbnails, checkLowStorage, quickOpen, filterMode, customExtensions)
         
         if (goBackAfterSave) {
             onBack()
@@ -106,7 +110,7 @@ fun SettingsScreen(
     }
 
     // Dirty State Tracking simplified (recalculated on recomposition)
-    val isDirty = path != currentDefaultPath ||
+    val isDirty = path.text != currentDefaultPath ||
                   selectedComponent != currentTargetAppPackage ||
                   keepSelection != currentKeepSelection ||
                   showThumbnails != currentShowThumbnails ||
@@ -345,12 +349,13 @@ fun SettingsScreen(
                     item(key = "input_path") {
                         // Path Input
                         Box(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
-                            OutlinedTextField(
+                            com.foss.simpleshare.ui.components.PathAutocomplete(
                                 value = path,
                                 onValueChange = { 
                                     path = it
                                     isPathError = false
                                 },
+                                onPathChange = { /* handled by onValueChange state update */ },
                                 isError = isPathError,
                                 label = { 
                                     Text(
@@ -360,17 +365,17 @@ fun SettingsScreen(
                                 },
                                 modifier = Modifier.fillMaxWidth(),
                                 trailingIcon = {
-                                    TextButton(onClick = { path = currentBrowserPath }) {
+                                    TextButton(onClick = { 
+                                        val newPath = currentBrowserPath
+                                        path = androidx.compose.ui.text.input.TextFieldValue(
+                                            text = newPath,
+                                            selection = androidx.compose.ui.text.TextRange(newPath.length)
+                                        )
+                                        isPathError = false
+                                    }) {
                                         Text("Use Current")
                                     }
-                                },
-                                singleLine = true,
-                                shape = RoundedCornerShape(12.dp),
-                                colors = OutlinedTextFieldDefaults.colors(
-                                    focusedContainerColor = Color.Transparent,
-                                    unfocusedContainerColor = Color.Transparent,
-                                    disabledContainerColor = Color.Transparent,
-                                )
+                                }
                             )
                         }
                     }
@@ -471,7 +476,10 @@ fun SettingsScreen(
                              Column(horizontalAlignment = Alignment.CenterHorizontally) {
                                  TextButton(
                                      onClick = { 
-                                         path = currentDefaultPath // Reset path to default
+                                         path = androidx.compose.ui.text.input.TextFieldValue(
+                                            text = currentDefaultPath,
+                                            selection = androidx.compose.ui.text.TextRange(currentDefaultPath.length)
+                                         ) // Reset path to default
                                          onReset() 
                                      }
                                  ) {
