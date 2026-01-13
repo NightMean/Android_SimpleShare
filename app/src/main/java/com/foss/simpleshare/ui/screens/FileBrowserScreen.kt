@@ -192,6 +192,21 @@ fun FileBrowserScreen(
 
     fun refreshFiles() {
         rawFiles = repository.listFiles(currentPath, allowedExtensions) // Pass extensions
+        
+        // Prune selection: Remove files that no longer exist
+        val iterator = selectedFiles.iterator()
+        var removedCount = 0
+        while (iterator.hasNext()) {
+            val file = iterator.next()
+            if (!file.file.exists()) {
+                iterator.remove()
+                removedCount++
+            }
+        }
+        
+        if (removedCount > 0) {
+             Toast.makeText(context, "Selection updated: Removed $removedCount missing files", Toast.LENGTH_SHORT).show()
+        }
     }
     
     // Deletion Logic
